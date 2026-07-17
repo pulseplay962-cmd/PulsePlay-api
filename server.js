@@ -11,11 +11,11 @@ const app = express();
 app.use(cors({
   origin: [
     "http://localhost:5173",
-    "https://pulseplay-v2.onrender.com",
+    "https://pulseplay-v2-f0wz.onrender.com",
     "https://pulseplay.online",
     "https://www.pulseplay.online"
   ],
-  credentials: true
+  credentials:true
 }));
 
 app.use(express.json());
