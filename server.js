@@ -1,57 +1,116 @@
+import dotenv from "dotenv";
+dotenv.config();
+
 import express from "express";
 import cors from "cors";
-import "dotenv/config";
 
-import twitchRouter from "./routes/twitch.js";
+import twitchRoutes from "./routes/twitch.js";
 import aiRoutes from "./routes/aiRoutes.js";
 
 
 const app = express();
 
 
-app.use(cors({
-  origin:[
-    "http://localhost:5173",
-    "https://pulseplay-v2-f0wz.onrender.com",
-    "https://pulseplay.online",
-    "https://www.pulseplay.online"
-  ],
-  credentials:true
-}));
+const PORT = process.env.PORT || 5000;
+
+
+
+// ========================
+// Middleware
+// ========================
+
+app.use(
+  cors({
+    origin:[
+      "http://localhost:5173",
+      "http://localhost:5174",
+      "https://pulseplay-v2-f0wz.onrender.com",
+      "https://pulseplay.online",
+      "https://www.pulseplay.online"
+    ],
+    credentials:true
+  })
+);
 
 
 app.use(express.json());
 
 
 
+
+// ========================
+// Health Checks
+// ========================
+
 app.get("/", (req,res)=>{
+
   res.json({
+
     success:true,
+
     message:"PulsePlay API is running 🚀"
+
   });
+
 });
+
 
 
 app.get("/api/health",(req,res)=>{
+
   res.json({
-    status:"ok"
+
+    status:"ok",
+
+    service:"PulsePlay API"
+
   });
+
 });
 
 
 
+
+
+
+// ========================
+// Routes
+// ========================
+
+
 console.log("Loading Twitch routes...");
-app.use("/api/twitch", twitchRouter);
+
+app.use(
+  "/api/twitch",
+  twitchRoutes
+);
+
 
 
 console.log("Loading AI routes...");
-app.use("/api/ai", aiRoutes);
+
+app.use(
+  "/api/ai",
+  aiRoutes
+);
+
+console.log("AI routes mounted at /api/ai");
 
 
 
-const PORT = process.env.PORT || 3000;
+
+
+
+
+// ========================
+// Start Server
+// ========================
 
 
 app.listen(PORT,()=>{
-  console.log(`PulsePlay API running on port ${PORT}`);
+
+  console.log(
+    `PulsePlay API running on port ${PORT}`
+  );
+
 });

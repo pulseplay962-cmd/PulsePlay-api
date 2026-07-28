@@ -1,43 +1,50 @@
 import openai from "./openaiService.js";
 import { pulsePlayBrand } from "./prompts.js";
+import { generateImage } from "./imageService.js";
+import { supabase } from "../../lib/supabase.js";
 
 
+
+
+// =====================================
+// PulsePlay Weekly Content Schedule
+// =====================================
 
 const weeklySchedule = {
 
-    Monday: {
-        website: "Game Spotlight",
-        facebook: "Promote article + discussion"
+    Monday:{
+        website:"Game Spotlight",
+        facebook:"Promote article + discussion"
     },
 
-    Tuesday: {
-        website: "Gaming Gear Guide",
-        facebook: "Gear teaser"
+    Tuesday:{
+        website:"Gaming Gear Guide",
+        facebook:"Gear teaser"
     },
 
-    Wednesday: {
-        website: "Homepage update",
-        facebook: "Community poll"
+    Wednesday:{
+        website:"Community Poll",
+        facebook:"Community discussion"
     },
 
-    Thursday: {
-        website: "Stream announcement",
-        facebook: "Go-live announcement"
+    Thursday:{
+        website:"Stream Announcement",
+        facebook:"Go-live announcement"
     },
 
-    Friday: {
-        website: "Weekend game recommendations",
-        facebook: "Weekend picks"
+    Friday:{
+        website:"Weekend Recommendations",
+        facebook:"Weekend picks"
     },
 
-    Saturday: {
-        website: "Live banner",
-        facebook: "Live reminder"
+    Saturday:{
+        website:"Stream Reminder",
+        facebook:"Live reminder"
     },
 
-    Sunday: {
-        website: "Weekly recap",
-        facebook: "Community thank-you"
+    Sunday:{
+        website:"Weekly Recap",
+        facebook:"Community thank-you"
     }
 
 };
@@ -48,21 +55,132 @@ const weeklySchedule = {
 
 
 
-// ================================
-// Single Article Generator
-// ================================
+// =====================================
+// Get Upcoming Dates
+// =====================================
 
-export async function generateArticle(topic) {
+function getUpcomingDates(){
+
+    const dates = {};
+
+    const today = new Date();
+
+
+    Object.keys(weeklySchedule)
+    .forEach(day=>{
+
+
+        const date =
+            new Date(today);
+
+
+        const currentDay =
+            date.getDay();
+
+
+        const targetDay =
+            [
+                "Sunday",
+                "Monday",
+                "Tuesday",
+                "Wednesday",
+                "Thursday",
+                "Friday",
+                "Saturday"
+            ]
+            .indexOf(day);
+
+
+
+        let difference =
+            targetDay - currentDay;
+
+
+
+        if(difference <= 0){
+
+            difference += 7;
+
+        }
+
+
+
+        date.setDate(
+            date.getDate() + difference
+        );
+
+
+
+        dates[day] =
+            date.toISOString()
+            .split("T")[0];
+
+
+    });
+
+
+    return dates;
+
+}
+
+
+
+
+
+
+
+// =====================================
+// Parse AI JSON Safely
+// =====================================
+
+function parseAIResponse(content){
+
+
+    try{
+
+        return JSON.parse(content);
+
+
+    }catch(error){
+
+
+        console.error(
+            "AI JSON FAILURE:",
+            content
+        );
+
+
+        throw new Error(
+            "AI returned invalid JSON"
+        );
+
+    }
+
+}
+
+
+
+
+
+
+
+
+
+// =====================================
+// Generate Single Article
+// =====================================
+
+export async function generateArticle(topic){
 
 
     const today =
-        new Date().toLocaleDateString(
+        new Date()
+        .toLocaleDateString(
             "en-US",
             {
                 weekday:"long"
             }
         );
-
 
 
     const schedule =
@@ -71,9 +189,9 @@ export async function generateArticle(topic) {
 
 
 
-
     const response =
         await openai.chat.completions.create({
+
 
             model:"gpt-4.1-mini",
 
@@ -92,7 +210,6 @@ export async function generateArticle(topic) {
                 },
 
 
-
                 {
                     role:"user",
 
@@ -100,16 +217,18 @@ export async function generateArticle(topic) {
 
 You are the PulsePlay AI Content Manager.
 
-Today's schedule:
+Create premium gaming content.
+
+Schedule:
 
 Day:
 ${today}
 
-Website Content:
-${schedule?.website || "Gaming article"}
+Website:
+${schedule?.website}
 
-Facebook Content:
-${schedule?.facebook || "Community post"}
+Facebook:
+${schedule?.facebook}
 
 
 Topic:
@@ -117,13 +236,10 @@ Topic:
 ${topic}
 
 
-Create content for PulsePlay.online.
+Return JSON ONLY.
 
 
-Return ONLY valid JSON.
-
-
-Format:
+FORMAT:
 
 {
 "title":"",
@@ -137,38 +253,34 @@ Format:
 
 Requirements:
 
-
 TITLE:
-Create an SEO friendly gaming title.
-
-
-META:
-Create a search optimized description.
-
+SEO optimized gaming headline.
 
 ARTICLE:
-Create an 800-1200 word gaming article.
+800-1200 words.
 
 Include:
-- engaging introduction
-- multiple sections
-- gaming insights
-- community discussion question
+
+- Introduction
+- Gaming analysis
+- Community discussion question
+- SEO keywords
 
 
 FACEBOOK:
-Create an engaging Facebook post.
+Create engagement focused post.
 
 
 IMAGE PROMPT:
-Create a detailed AI image generation prompt.
+Create detailed AI artwork prompt.
 
 
 HASHTAGS:
-Create gaming related hashtags.
+Return gaming hashtags.
 
 
-Brand voice:
+
+Brand:
 
 ${pulsePlayBrand}
 
@@ -182,12 +294,11 @@ ${pulsePlayBrand}
 
 
 
-
-
-    return JSON.parse(
-        response.choices[0].message.content
+    return parseAIResponse(
+        response.choices[0]
+        .message
+        .content
     );
-
 
 }
 
@@ -199,90 +310,59 @@ ${pulsePlayBrand}
 
 
 
-// ================================
-// Weekly AI Content Generator
-// ================================
+// =====================================
+// Generate Weekly Package
+// =====================================
 
 export async function generateWeeklyContent(){
 
 
-    const response =
-        await openai.chat.completions.create({
+    try{
 
 
-            model:"gpt-4.1-mini",
-
-
-
-            response_format:{
-                type:"json_object"
-            },
+        const dates =
+            getUpcomingDates();
 
 
 
-            messages:[
+
+        const response =
+            await openai.chat.completions.create({
 
 
-                {
-                    role:"system",
-                    content:pulsePlayBrand
+                model:"gpt-4.1-mini",
+
+
+                response_format:{
+                    type:"json_object"
                 },
 
 
+                messages:[
 
-                {
-                    role:"user",
 
-                    content:`
+                    {
+                        role:"system",
+                        content:pulsePlayBrand
+                    },
+
+
+                    {
+                        role:"user",
+
+                        content:`
 
 You are the PulsePlay AI Weekly Content Manager.
 
 
-Create a complete 7-day gaming media content package.
+Create 7 gaming posts.
 
 
-Return ONLY valid JSON.
-
-
-
-Create exactly these posts:
+Return ONLY JSON.
 
 
 
-Monday:
-Game Spotlight
-
-
-Tuesday:
-Gaming Gear Guide
-
-
-Wednesday:
-Community Poll
-
-
-Thursday:
-Stream Announcement
-
-
-Friday:
-Weekend Recommendations
-
-
-Saturday:
-Stream Reminder
-
-
-Sunday:
-Weekly Recap
-
-
-
-
-
-Return this exact format:
-
-
+FORMAT:
 
 {
 "posts":[
@@ -294,122 +374,527 @@ Return this exact format:
 "body":"",
 "social_caption":"",
 "image_prompt":"",
-"scheduled_date":""
+"hashtags":[]
 }
 
 ]
+
 }
 
 
 
+Schedule:
 
 
-Requirements:
+Monday:
+Game Spotlight
+
+Tuesday:
+Gaming Gear Guide
+
+Wednesday:
+Community Poll
+
+Thursday:
+Stream Announcement
+
+Friday:
+Weekend Recommendations
+
+Saturday:
+Stream Reminder
+
+Sunday:
+Weekly Recap
 
 
 
-TITLE:
-
-Create an engaging gaming headline.
-
-
-
-CONTENT TYPE:
-
-Use one of:
+Allowed content types:
 
 article
-
 facebook_post
-
 poll
-
 stream_announcement
 
 
 
-CATEGORY:
-
-Use one of:
+Allowed categories:
 
 Games
-
 Gear
-
 Community
-
 Streaming
-
 Recommendations
 
 
 
-BODY:
-
-Create the main content.
-
-
-
-SOCIAL CAPTION:
-
-Create a Facebook-ready gaming post.
-
-
-
-IMAGE PROMPT:
-
-Create a detailed AI image generation prompt.
-
-
-
-SCHEDULED DATE:
-
-Return ISO date format only:
-
-YYYY-MM-DD
-
-
-Use the next upcoming occurrence for each scheduled day.
-
-
-
-Brand style:
+Brand:
 
 ${pulsePlayBrand}
 
-
-
-Make the content exciting for the PulsePlay gaming community.
-
 `
 
-                }
+                    }
 
-            ]
+                ]
 
-        });
-
-
+            });
 
 
 
 
 
-    const result =
-        JSON.parse(
-            response.choices[0].message.content
+
+        const result =
+            parseAIResponse(
+                response.choices[0]
+                .message
+                .content
+            );
+
+
+
+
+
+
+
+        const posts =
+            (result.posts || [])
+            .map((post,index)=>({
+
+
+                ...post,
+
+
+                scheduled_date:
+                    Object.values(dates)[index],
+
+
+                status:
+                    "pending"
+
+
+            }));
+
+
+
+
+
+
+
+        console.log(
+            "AI POSTS CREATED:",
+            posts.length
         );
 
 
 
+        return posts;
+
+
+
+    }catch(error){
+
+
+        console.error(
+            "WEEKLY AI ERROR:",
+            error
+        );
+
+
+        throw error;
+
+    }
+
+}
+
+
+
+
+
+
+
+
+
+// =====================================
+// Save AI Queue
+// =====================================
+
+export async function saveAIQueue(posts){
+
+
+    if(!posts || posts.length === 0){
+
+        console.log(
+            "No AI posts to save"
+        );
+
+        return [];
+
+    }
+
+
+
     console.log(
-        "AI WEEKLY RESULT:",
-        result
+        "Saving AI queue items:",
+        posts.length
     );
 
 
 
-    return result.posts || [];
+    const queueItems = posts.map(post => ({
 
+        title:
+            post.title,
+
+
+        content_type:
+            post.content_type,
+
+
+        category:
+            post.category,
+
+
+        body:
+            post.body,
+
+
+        social_caption:
+            post.social_caption,
+
+
+        image_prompt:
+            post.image_prompt,
+
+
+        scheduled_date:
+            post.scheduled_date,
+
+
+        status:
+            "pending"
+
+    }));
+
+
+
+
+    console.log(
+        "QUEUE INSERT DATA:",
+        queueItems[0]
+    );
+
+
+
+
+
+    const {data,error} = await supabase
+
+        .from("ai_content_queue")
+
+        .insert(queueItems)
+
+        .select();
+
+
+
+
+
+
+    if(error){
+
+
+        console.error(
+            "QUEUE INSERT FAILED:",
+            error
+        );
+
+
+        throw error;
+
+    }
+
+
+
+
+    console.log(
+        "QUEUE SAVED:",
+        data.length
+    );
+
+
+
+    return data;
+
+}
+
+
+
+
+
+
+
+
+
+// =====================================
+// Generate + Save Weekly
+// =====================================
+
+export async function generateAndSaveWeeklyContent(){
+
+
+    console.log(
+        "Starting weekly AI generation..."
+    );
+
+
+    const posts =
+        await generateWeeklyContent();
+
+
+
+    console.log(
+        "Generated posts:",
+        posts.length
+    );
+
+
+
+    const saved =
+        await saveAIQueue(posts);
+
+
+
+    console.log(
+        "Saved queue:",
+        saved.length
+    );
+
+
+
+    return saved;
+
+}
+
+
+
+
+
+
+
+
+
+// =====================================
+// Publish AI Content
+// =====================================
+
+export async function publishAIContent(item){
+
+
+    try{
+
+
+        console.log(
+            "Publishing:",
+            item.title
+        );
+
+
+
+
+
+        let imageUrl = "";
+
+
+
+
+
+        if(item.image_prompt){
+
+
+            try{
+
+
+                imageUrl =
+                    await generateImage(
+                        item.image_prompt
+                    );
+
+
+            }catch(error){
+
+
+                console.error(
+                    "IMAGE FAILED:",
+                    error
+                );
+
+
+            }
+
+        }
+
+
+
+
+
+
+
+
+        const slug =
+
+            item.title
+
+            .toLowerCase()
+
+            .trim()
+
+            .replace(
+                /[^a-z0-9]+/g,
+                "-"
+            )
+
+            .replace(
+                /^-|-$/g,
+                ""
+            );
+
+
+
+
+
+
+
+
+        const {data,error}=
+
+            await supabase
+
+            .from("news")
+
+            .insert({
+
+                title:item.title,
+
+                slug,
+
+                excerpt:
+                    item.social_caption,
+
+                content:
+                    item.body,
+
+                image:
+                    imageUrl,
+
+                category:
+                    item.category,
+
+                featured:false,
+
+                published:true,
+
+                author:
+                    "PulsePlay AI",
+
+                meta_description:
+                    item.body
+                    ?.substring(
+                        0,
+                        160
+                    ),
+
+
+                facebook_post:
+                    item.social_caption,
+
+
+                image_prompt:
+                    item.image_prompt,
+
+
+                hashtags:
+                    item.hashtags || []
+
+            })
+
+            .select()
+
+            .single();
+
+
+
+
+
+
+
+
+        if(error){
+
+            throw error;
+
+        }
+
+
+
+
+
+
+
+        if(item.id){
+
+
+            await supabase
+
+            .from("ai_content_queue")
+
+            .update({
+
+                status:"published",
+
+                published_at:
+                    new Date()
+                    .toISOString()
+
+            })
+
+            .eq(
+                "id",
+                item.id
+            );
+
+
+        }
+
+
+
+
+
+
+
+        console.log(
+            "PUBLISHED NEWS:",
+            data.id
+        );
+
+
+
+        return data;
+
+
+
+    }catch(error){
+
+
+        console.error(
+            "PUBLISH FAILED:",
+            error
+        );
+
+
+        throw error;
+
+    }
 
 }
