@@ -1,5 +1,4 @@
 import openai from "./openaiService.js";
-import { supabase } from "../../lib/supabase.js";
 
 
 
@@ -9,13 +8,6 @@ export async function generateImage(prompt) {
     try {
 
 
-        console.log(
-            "Generating AI image:",
-            prompt
-        );
-
-
-
         const response =
             await openai.images.generate({
 
@@ -23,7 +15,7 @@ export async function generateImage(prompt) {
 
                 prompt,
 
-                size: "1536x864",
+                size: "1536x1024",
 
             });
 
@@ -31,17 +23,17 @@ export async function generateImage(prompt) {
 
 
 
-        const imageData =
-            response.data?.[0];
+        const imageUrl =
+            response.data?.[0]?.url;
 
 
 
 
 
-        if(!imageData){
+        if(!imageUrl){
 
             throw new Error(
-                "AI image generation returned no image"
+                "AI image generation returned no image URL"
             );
 
         }
@@ -50,95 +42,7 @@ export async function generateImage(prompt) {
 
 
 
-        /*
-            GPT image models may return
-            base64 data instead of a URL
-        */
-
-        if(imageData.b64_json){
-
-
-            const buffer =
-                Buffer.from(
-                    imageData.b64_json,
-                    "base64"
-                );
-
-
-
-            const fileName =
-                `ai-${Date.now()}.png`;
-
-
-
-            const { error:uploadError } =
-                await supabase.storage
-                .from("news-images")
-                .upload(
-
-                    fileName,
-
-                    buffer,
-
-                    {
-                        contentType:
-                        "image/png",
-
-                        upsert:false,
-
-                    }
-
-                );
-
-
-
-            if(uploadError){
-
-                throw uploadError;
-
-            }
-
-
-
-
-
-            const {data:urlData} =
-                supabase.storage
-                .from("news-images")
-                .getPublicUrl(
-                    fileName
-                );
-
-
-
-
-
-            return urlData.publicUrl;
-
-
-        }
-
-
-
-
-
-        /*
-            Fallback if API returns URL
-        */
-
-        if(imageData.url){
-
-            return imageData.url;
-
-        }
-
-
-
-
-
-        throw new Error(
-            "No usable image returned"
-        );
+        return imageUrl;
 
 
 
