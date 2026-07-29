@@ -685,7 +685,7 @@ export async function generateAndSaveWeeklyContent(){
 
 
 
-// =====================================
+/// =====================================
 // Publish AI Content
 // =====================================
 
@@ -702,6 +702,40 @@ export async function publishAIContent(item){
 
 
 
+        // Prevent duplicate publishing
+
+        if(item.id){
+
+
+            const {data:existing} =
+                await supabase
+
+                .from("news")
+
+                .select("id")
+
+                .eq(
+                    "title",
+                    item.title
+                )
+
+                .maybeSingle();
+
+
+
+            if(existing){
+
+
+                throw new Error(
+                    "This article has already been published"
+                );
+
+            }
+
+        }
+
+
+
 
 
         let imageUrl = "";
@@ -709,6 +743,8 @@ export async function publishAIContent(item){
 
 
 
+
+        // Generate AI artwork
 
         if(item.image_prompt){
 
@@ -722,14 +758,24 @@ export async function publishAIContent(item){
                     );
 
 
+                console.log(
+                    "IMAGE CREATED:",
+                    imageUrl
+                );
+
+
             }catch(error){
 
 
                 console.error(
-                    "IMAGE FAILED:",
-                    error
+                    "IMAGE GENERATION FAILED:",
+                    error.message
                 );
 
+
+                // Continue without image
+
+                imageUrl = "";
 
             }
 
@@ -741,9 +787,9 @@ export async function publishAIContent(item){
 
 
 
+        // Create SEO slug
 
         const slug =
-
             item.title
 
             .toLowerCase()
@@ -766,8 +812,9 @@ export async function publishAIContent(item){
 
 
 
+        // Insert News Article
 
-        const {data,error}=
+        const {data,error} =
 
             await supabase
 
@@ -775,28 +822,38 @@ export async function publishAIContent(item){
 
             .insert({
 
-                title:item.title,
+                title:
+                    item.title,
+
 
                 slug,
+
 
                 excerpt:
                     item.social_caption,
 
+
                 content:
                     item.body,
+
 
                 image:
                     imageUrl,
 
+
                 category:
                     item.category,
 
+
                 featured:false,
+
 
                 published:true,
 
+
                 author:
                     "PulsePlay AI",
+
 
                 meta_description:
                     item.body
@@ -806,12 +863,15 @@ export async function publishAIContent(item){
                     ),
 
 
+
                 facebook_post:
                     item.social_caption,
 
 
+
                 image_prompt:
                     item.image_prompt,
+
 
 
                 hashtags:
@@ -822,8 +882,6 @@ export async function publishAIContent(item){
             .select()
 
             .single();
-
-
 
 
 
@@ -841,29 +899,44 @@ export async function publishAIContent(item){
 
 
 
+        // Update AI Queue
 
         if(item.id){
 
 
-            await supabase
+            const {error:updateError}=
 
-            .from("ai_content_queue")
+                await supabase
 
-            .update({
+                .from("ai_content_queue")
 
-                status:"published",
+                .update({
 
-                published_at:
-                    new Date()
-                    .toISOString()
+                    status:
+                        "published",
 
-            })
 
-            .eq(
-                "id",
-                item.id
-            );
+                    published_at:
+                        new Date()
+                        .toISOString()
 
+                })
+
+                .eq(
+                    "id",
+                    item.id
+                );
+
+
+
+            if(updateError){
+
+                console.error(
+                    "QUEUE UPDATE FAILED:",
+                    updateError
+                );
+
+            }
 
         }
 
