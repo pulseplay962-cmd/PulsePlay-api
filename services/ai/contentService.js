@@ -971,3 +971,130 @@ export async function publishAIContent(item){
     }
 
 }
+
+// =====================================
+// Generate Queue Image Preview
+// =====================================
+
+export async function generateQueueImage(item){
+
+
+    try{
+
+
+        console.log(
+            "Generating preview image:",
+            item.title
+        );
+
+
+
+        const imageUrl =
+            await generateImage(
+                item.image_prompt
+            );
+
+
+
+        const {data,error} =
+
+            await supabase
+
+            .from("ai_content_queue")
+
+            .update({
+
+                image_url:imageUrl
+
+            })
+
+            .eq(
+                "id",
+                item.id
+            )
+
+            .select()
+
+            .single();
+
+
+
+
+
+        if(error){
+
+            throw error;
+
+        }
+
+
+
+        return data;
+
+
+
+    }catch(error){
+
+
+        console.error(
+            "QUEUE IMAGE ERROR:",
+            error
+        );
+
+
+        throw error;
+
+
+    }
+
+}
+
+// =====================================
+// Generate Image For Queue Item
+// =====================================
+
+export async function generateImageForQueueItem(item){
+
+
+    const imageUrl =
+        await generateImage(
+            item.image_prompt
+        );
+
+
+
+    const {data,error} =
+
+        await supabase
+
+        .from("ai_content_queue")
+
+        .update({
+
+            image_url:imageUrl
+
+        })
+
+        .eq(
+            "id",
+            item.id
+        )
+
+        .select()
+
+        .single();
+
+
+
+
+    if(error){
+
+        throw error;
+
+    }
+
+
+
+    return data;
+
+}

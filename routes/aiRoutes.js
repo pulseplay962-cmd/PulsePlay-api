@@ -706,7 +706,78 @@ router.post("/publish-test", async(req,res)=>{
 });
 
 
+// =====================================
+// Generate AI Image For Queue Item
+// =====================================
 
+router.post("/image/:id", async(req,res)=>{
+
+    try{
+
+
+        console.log(
+            "Generating image for:",
+            req.params.id
+        );
+
+
+
+        const {data:item,error} =
+            await supabase
+            .from("ai_content_queue")
+            .select("*")
+            .eq(
+                "id",
+                req.params.id
+            )
+            .single();
+
+
+
+        if(error){
+
+            throw error;
+
+        }
+
+
+
+        const updated =
+            await generateImageForQueueItem(item);
+
+
+
+        res.json({
+
+            success:true,
+
+            item:updated
+
+        });
+
+
+
+    }catch(error){
+
+
+        console.error(
+            "IMAGE ROUTE ERROR:",
+            error
+        );
+
+
+        res.status(500).json({
+
+            success:false,
+
+            error:error.message
+
+        });
+
+
+    }
+
+});
 
 console.log(
     "🔥 AI ROUTES READY"
