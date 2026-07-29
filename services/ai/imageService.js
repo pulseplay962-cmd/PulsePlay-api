@@ -3,8 +3,6 @@ import { supabase } from "../../lib/supabase.js";
 
 
 
-
-
 export async function generateImage(prompt) {
 
 
@@ -12,7 +10,8 @@ export async function generateImage(prompt) {
 
 
         console.log(
-            "Generating AI image..."
+            "Generating AI image:",
+            prompt
         );
 
 
@@ -32,8 +31,10 @@ export async function generateImage(prompt) {
 
 
 
+
         const imageData =
             response.data?.[0];
+
 
 
 
@@ -42,31 +43,44 @@ export async function generateImage(prompt) {
         if(!imageData){
 
             throw new Error(
-                "AI image generation returned no image"
+                "No image returned from OpenAI"
             );
 
         }
+
+
+
+
+
+
+
+        let imageBuffer;
+
 
 
 
 
 
         /*
-            gpt-image-1 returns base64 image data
-            We convert it into a buffer
+            GPT-IMAGE-1 usually returns
+            base64 image data
         */
 
 
-        const base64Image =
-            imageData.b64_json;
+        if(imageData.b64_json){
 
 
-
-        if(!base64Image){
-
-            throw new Error(
-                "No base64 image returned"
+            console.log(
+                "Using base64 image data"
             );
+
+
+            imageBuffer =
+                Buffer.from(
+                    imageData.b64_json,
+                    "base64"
+                );
+
 
         }
 
@@ -75,10 +89,84 @@ export async function generateImage(prompt) {
 
 
 
-        const imageBuffer =
-            Buffer.from(
-                base64Image,
-                "base64"
+        /*
+            Fallback if URL is returned
+        */
+
+
+        else if(imageData.url){
+
+
+            console.log(
+                "Downloading image URL..."
+            );
+
+
+            const imageResponse =
+                await fetch(
+                    imageData.url
+                );
+
+
+
+            if(!imageResponse.ok){
+
+                throw new Error(
+                    "Failed downloading AI image"
+                );
+
+            }
+
+
+
+            imageBuffer =
+                Buffer.from(
+                    await imageResponse.arrayBuffer()
+                );
+
+
+        }
+
+
+
+
+
+
+        else{
+
+
+            throw new Error(
+                "No usable image data returned"
+            );
+
+
+        }
+
+
+
+
+
+
+
+
+
+        const now =
+            new Date();
+
+
+
+        const year =
+            now.getFullYear();
+
+
+
+        const month =
+            String(
+                now.getMonth()+1
+            )
+            .padStart(
+                2,
+                "0"
             );
 
 
@@ -87,10 +175,9 @@ export async function generateImage(prompt) {
 
 
 
-        const filename =
+        const fileName =
 
-            `pulseplay-ai-${Date.now()}.png`;
-
+            `ai-images/${year}/${month}/pulseplay-ai-${Date.now()}.png`;
 
 
 
@@ -99,8 +186,8 @@ export async function generateImage(prompt) {
 
 
         console.log(
-            "Uploading image:",
-            filename
+            "Uploading:",
+            fileName
         );
 
 
@@ -109,15 +196,20 @@ export async function generateImage(prompt) {
 
 
 
-        const {error:uploadError}=
 
-            await supabase.storage
+        const {
+            error:uploadError
+        } =
+
+            await supabase
+
+            .storage
 
             .from("ai-images")
 
             .upload(
 
-                filename,
+                fileName,
 
                 imageBuffer,
 
@@ -138,10 +230,11 @@ export async function generateImage(prompt) {
 
 
 
+
         if(uploadError){
 
             console.error(
-                "SUPABASE IMAGE UPLOAD ERROR:",
+                "UPLOAD ERROR:",
                 uploadError
             );
 
@@ -158,15 +251,19 @@ export async function generateImage(prompt) {
 
 
 
-        const {data}=
+        const {
+            data:urlData
+        } =
 
-            supabase.storage
+            supabase
+
+            .storage
 
             .from("ai-images")
 
             .getPublicUrl(
 
-                filename
+                fileName
 
             );
 
@@ -176,10 +273,11 @@ export async function generateImage(prompt) {
 
 
 
-        if(!data?.publicUrl){
+
+        if(!urlData?.publicUrl){
 
             throw new Error(
-                "Could not create image URL"
+                "Failed creating public image URL"
             );
 
         }
@@ -190,9 +288,10 @@ export async function generateImage(prompt) {
 
 
 
+
         console.log(
-            "AI IMAGE URL:",
-            data.publicUrl
+            "AI IMAGE STORED:",
+            urlData.publicUrl
         );
 
 
@@ -201,7 +300,8 @@ export async function generateImage(prompt) {
 
 
 
-        return data.publicUrl;
+        return urlData.publicUrl;
+
 
 
 
