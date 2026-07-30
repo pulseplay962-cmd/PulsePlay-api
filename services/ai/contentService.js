@@ -1,7 +1,7 @@
 import openai from "./openaiService.js";
 import { pulsePlayBrand } from "./prompts.js";
-import { generateImage } from "./imageService.js";
 import { supabase } from "../../lib/supabase.js";
+import { generateImage } from "./imageService.js";
 
 
 
@@ -683,372 +683,6 @@ export async function generateAndSaveWeeklyContent(){
 
 
 
-
-
-/// =====================================
-// Publish AI Content
-// =====================================
-
-export async function publishAIContent(item){
-
-
-    try{
-
-
-        console.log(
-            "Publishing:",
-            item.title
-        );
-
-
-
-        // Prevent duplicate publishing
-
-        if(item.id){
-
-
-            const {data:existing} =
-                await supabase
-
-                .from("news")
-
-                .select("id")
-
-                .eq(
-                    "title",
-                    item.title
-                )
-
-                .maybeSingle();
-
-
-
-            if(existing){
-
-
-                throw new Error(
-                    "This article has already been published"
-                );
-
-            }
-
-        }
-
-
-
-
-
-        let imageUrl = "";
-
-
-
-
-
-        // Generate AI artwork
-
-        if(item.image_prompt){
-
-
-            try{
-
-
-                imageUrl =
-                    await generateImage(
-                        item.image_prompt
-                    );
-
-
-                console.log(
-                    "IMAGE CREATED:",
-                    imageUrl
-                );
-
-
-            }catch(error){
-
-
-                console.error(
-                    "IMAGE GENERATION FAILED:",
-                    error.message
-                );
-
-
-                // Continue without image
-
-                imageUrl = "";
-
-            }
-
-        }
-
-
-
-
-
-
-
-        // Create SEO slug
-
-        const slug =
-            item.title
-
-            .toLowerCase()
-
-            .trim()
-
-            .replace(
-                /[^a-z0-9]+/g,
-                "-"
-            )
-
-            .replace(
-                /^-|-$/g,
-                ""
-            );
-
-
-
-
-
-
-
-        // Insert News Article
-
-        const {data,error} =
-
-            await supabase
-
-            .from("news")
-
-            .insert({
-
-                title:
-                    item.title,
-
-
-                slug,
-
-
-                excerpt:
-                    item.social_caption,
-
-
-                content:
-                    item.body,
-
-
-                image:
-                    imageUrl,
-
-
-                category:
-                    item.category,
-
-
-                featured:false,
-
-
-                published:true,
-
-
-                author:
-                    "PulsePlay AI",
-
-
-                meta_description:
-                    item.body
-                    ?.substring(
-                        0,
-                        160
-                    ),
-
-
-
-                facebook_post:
-                    item.social_caption,
-
-
-
-                image_prompt:
-                    item.image_prompt,
-
-
-
-                hashtags:
-                    item.hashtags || []
-
-            })
-
-            .select()
-
-            .single();
-
-
-
-
-
-
-        if(error){
-
-            throw error;
-
-        }
-
-
-
-
-
-
-        // Update AI Queue
-
-        if(item.id){
-
-
-            const {error:updateError}=
-
-                await supabase
-
-                .from("ai_content_queue")
-
-                .update({
-
-                    status:
-                        "published",
-
-
-                    published_at:
-                        new Date()
-                        .toISOString()
-
-                })
-
-                .eq(
-                    "id",
-                    item.id
-                );
-
-
-
-            if(updateError){
-
-                console.error(
-                    "QUEUE UPDATE FAILED:",
-                    updateError
-                );
-
-            }
-
-        }
-
-
-
-
-
-
-
-        console.log(
-            "PUBLISHED NEWS:",
-            data.id
-        );
-
-
-
-        return data;
-
-
-
-    }catch(error){
-
-
-        console.error(
-            "PUBLISH FAILED:",
-            error
-        );
-
-
-        throw error;
-
-    }
-
-}
-
-// =====================================
-// Generate Queue Image Preview
-// =====================================
-
-export async function generateQueueImage(item){
-
-
-    try{
-
-
-        console.log(
-            "Generating preview image:",
-            item.title
-        );
-
-
-
-        const imageUrl =
-            await generateImage(
-                item.image_prompt
-            );
-
-
-
-        const {data,error} =
-
-            await supabase
-
-            .from("ai_content_queue")
-
-            .update({
-
-                image_url:imageUrl
-
-            })
-
-            .eq(
-                "id",
-                item.id
-            )
-
-            .select()
-
-            .single();
-
-
-
-
-
-        if(error){
-
-            throw error;
-
-        }
-
-
-
-        return data;
-
-
-
-    }catch(error){
-
-
-        console.error(
-            "QUEUE IMAGE ERROR:",
-            error
-        );
-
-
-        throw error;
-
-
-    }
-
-}
-
 // =====================================
 // Generate Image For Queue Item
 // =====================================
@@ -1096,5 +730,102 @@ export async function generateImageForQueueItem(item){
 
 
     return data;
+
+}
+
+// =====================================
+// Generate Queue Image Preview
+// =====================================
+
+export async function generateQueueImage(item){
+
+
+    try{
+
+
+        console.log(
+            "Generating preview image:",
+            item.title
+        );
+
+
+        if(!item.image_prompt){
+
+            throw new Error(
+                "No image prompt available"
+            );
+
+        }
+
+
+
+        const imageUrl =
+            await generateImage(
+                item.image_prompt
+            );
+
+
+
+
+
+        const {data,error} =
+
+            await supabase
+
+            .from("ai_content_queue")
+
+            .update({
+
+                image_url:imageUrl
+
+            })
+
+            .eq(
+                "id",
+                item.id
+            )
+
+            .select()
+
+            .single();
+
+
+
+
+
+        if(error){
+
+            throw error;
+
+        }
+
+
+
+
+
+        console.log(
+            "QUEUE IMAGE UPDATED:",
+            imageUrl
+        );
+
+
+
+        return data;
+
+
+
+    }catch(error){
+
+
+        console.error(
+            "QUEUE IMAGE ERROR:",
+            error
+        );
+
+
+        throw error;
+
+
+    }
 
 }

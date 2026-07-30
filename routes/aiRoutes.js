@@ -4,9 +4,13 @@ import {
     generateArticle,
     generateWeeklyContent,
     generateAndSaveWeeklyContent,
-    publishAIContent,
     generateQueueImage
 } from "../services/ai/contentService.js";
+
+
+import {
+    publishAIContent
+} from "../services/ai/publisherService.js";
 
 import { supabase } from "../lib/supabase.js";
 
@@ -404,94 +408,7 @@ router.post("/approve/:id", async(req,res)=>{
 
 });
 
-// =====================================
-// Generate AI Image Preview
-// =====================================
 
-router.post("/image/:id", async(req,res)=>{
-
-    try{
-
-
-        console.log(
-            "Generating AI image for:",
-            req.params.id
-        );
-
-
-
-        const {data:item,error} =
-
-            await supabase
-
-            .from("ai_content_queue")
-
-            .select("*")
-
-            .eq(
-                "id",
-                req.params.id
-            )
-
-            .single();
-
-
-
-
-
-        if(error){
-
-            throw error;
-
-        }
-
-
-
-
-
-        const updated =
-
-            await generateQueueImage(item);
-
-
-
-
-
-        res.json({
-
-            success:true,
-
-            message:
-            "AI image generated",
-
-            item:updated
-
-        });
-
-
-
-    }catch(error){
-
-
-        console.error(
-            "IMAGE PREVIEW ERROR:",
-            error
-        );
-
-
-
-        res.status(500).json({
-
-            success:false,
-
-            error:error.message
-
-        });
-
-
-    }
-
-});
 
 
 // =====================================
@@ -528,7 +445,10 @@ router.post("/publish/:id", async(req,res)=>{
 
         }
 
-
+        console.log(
+    "AI ROUTE PUBLISHING ITEM:",
+    item
+);
 
         const published =
             await publishAIContent(item);
