@@ -6,6 +6,8 @@ import {
     createSocialPost
 } from "../socialQueue.js";
 
+import { applyAmazonAffiliate } from "../affiliate.js";
+
 
 
 // =====================================
@@ -239,6 +241,8 @@ if(
         // =====================================
 
 
+        const processedBody = applyAmazonAffiliate(item.body || "", process.env.AMAZON_AFFILIATE_TAG?.trim());
+
         const {
 
             data:article,
@@ -271,7 +275,7 @@ if(
 
                 content:
 
-                item.body || "",
+                processedBody || "",
 
 
 

@@ -1,707 +1,390 @@
 import express from "express";
+import { createClient } from "@supabase/supabase-js";
 
 import {
-    generateArticle,
-    generateWeeklyContent,
     generateAndSaveWeeklyContent,
-    generateQueueImage
+    generateQueueImage,
 } from "../services/ai/contentService.js";
-
 
 import {
     publishAIContent
 } from "../services/ai/publisherService.js";
 
-import { supabase } from "../lib/supabase.js";
-
-
 const router = express.Router();
 
-
-console.log("🔥 LOADED aiRoutes.js");
-
-
-
-
-// =====================================
-// AI Route Test
-// =====================================
-
-router.get("/test", (req,res)=>{
-
-    console.log("✅ AI TEST ROUTE HIT");
-
-    res.json({
-
-        success:true,
-
-        message:"PulsePlay AI routes are working 🚀"
-
-    });
-
-});
-
-
+const supabase = createClient(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_ROLE_KEY
+);
 
 
 // =====================================
-// Supabase Test
+// PulseAI Content Generator
 // =====================================
 
-router.get("/supabase-test", async(req,res)=>{
 
-    try{
+router.get(
+    "/queue",
+    async (req, res) => {
+        try {
+            const { data, error } = await supabase
+                .from("ai_content_queue")
+                .select("*")
+                .order("scheduled_date", { ascending: true });
 
-        const {data,error} =
-            await supabase
-            .from("ai_content_queue")
-            .select("id")
-            .limit(1);
+            if (error) {
+                console.error("AI queue load error:", error);
+                return res.status(500).json({
+                    success: false,
+                    error: error.message || "Unable to load AI queue."
+                });
+            }
 
-
-
-        res.json({
-
-            success:true,
-
-            message:"Supabase connection working",
-
-            data,
-
-            error
-
-        });
-
-
-
-    }catch(error){
-
-        res.status(500).json({
-
-            success:false,
-
-            error:error.message
-
-        });
-
+            return res.json({
+                success: true,
+                queue: data || []
+            });
+        } catch (error) {
+            console.error("AI queue route error:", error);
+            return res.status(500).json({
+                success: false,
+                error: error.message || "Unable to load AI queue."
+            });
+        }
     }
-
-});
-
+);
 
 
+router.post(
+    "/generate-weekly-save",
+    async (req, res) => {
+        try {
+            const posts = await generateAndSaveWeeklyContent();
 
-// =====================================
-// Generate Single Article
-// =====================================
-
-router.get("/generate", async(req,res)=>{
-
-    try{
-
-
-        const topic =
-            req.query.topic ||
-            "Assassin's Creed Odyssey returns to the spotlight";
-
-
-
-        console.log(
-            "Generating article:",
-            topic
-        );
-
-
-
-        const content =
-            await generateArticle(topic);
-
-
-
-        res.json({
-
-            success:true,
-
-            content
-
-        });
-
-
-
-    }catch(error){
-
-
-        console.error(
-            "AI ARTICLE ERROR:",
-            error
-        );
-
-
-        res.status(500).json({
-
-            success:false,
-
-            error:error.message
-
-        });
-
+            return res.json({
+                success: true,
+                posts
+            });
+        } catch (error) {
+            console.error("AI generate weekly save error:", error);
+            return res.status(500).json({
+                success: false,
+                error: error.message || "Unable to generate weekly AI content."
+            });
+        }
     }
-
-});
-
+);
 
 
+router.post(
+    "/image/:id",
+    async (req, res) => {
+        try {
+            const { id } = req.params;
 
-// =====================================
-// Generate Weekly Preview
-// =====================================
+            if (!id) {
+                return res.status(400).json({
+                    success: false,
+                    error: "Queue item ID is required."
+                });
+            }
 
-router.post("/generate-weekly", async(req,res)=>{
+            const { data: item, error: fetchError } = await supabase
+                .from("ai_content_queue")
+                .select("*")
+                .eq("id", id)
+                .single();
 
-    try{
+            if (fetchError || !item) {
+                console.error("AI queue item load error:", fetchError);
+                return res.status(404).json({
+                    success: false,
+                    error: "Queue item not found."
+                });
+            }
 
+            const updatedItem = await generateQueueImage(item);
 
-        console.log(
-            "Generating AI weekly preview..."
-        );
-
-
-        const posts =
-            await generateWeeklyContent();
-
-
-
-        res.json({
-
-            success:true,
-
-            count:posts.length,
-
-            posts
-
-        });
-
-
-
-    }catch(error){
-
-
-        console.error(
-            "AI WEEKLY ERROR:",
-            error
-        );
-
-
-        res.status(500).json({
-
-            success:false,
-
-            error:error.message
-
-        });
-
+            return res.json({
+                success: true,
+                item: updatedItem
+            });
+        } catch (error) {
+            console.error("AI image route error:", error);
+            return res.status(500).json({
+                success: false,
+                error: error.message || "Unable to generate AI image."
+            });
+        }
     }
-
-});
-
+);
 
 
+router.post(
+    "/publish/:id",
+    async (req, res) => {
+        try {
+            const { id } = req.params;
 
-// =====================================
-// Generate + Save Weekly Queue
-// =====================================
+            if (!id) {
+                return res.status(400).json({
+                    success: false,
+                    error: "Queue item ID is required."
+                });
+            }
 
-router.post("/generate-weekly-save", async(req,res)=>{
+            const { data: item, error: fetchError } = await supabase
+                .from("ai_content_queue")
+                .select("*")
+                .eq("id", id)
+                .single();
 
-    try{
+            if (fetchError || !item) {
+                console.error("AI publish queue item error:", fetchError);
+                return res.status(404).json({
+                    success: false,
+                    error: "Queue item not found."
+                });
+            }
 
+            if (item.status !== "approved") {
+                return res.status(400).json({
+                    success: false,
+                    error: "Only approved content can be published."
+                });
+            }
 
-        console.log(
-            "Generating and saving AI weekly queue..."
-        );
+            const result = await publishAIContent(item);
 
-
-
-        const posts =
-            await generateAndSaveWeeklyContent();
-
-
-
-        res.json({
-
-            success:true,
-
-            message:
-            "Weekly AI content queued successfully",
-
-            count:
-            posts.length,
-
-            posts
-
-        });
-
-
-
-    }catch(error){
-
-
-        console.error(
-            "AI QUEUE SAVE ERROR:",
-            error
-        );
-
-
-        res.status(500).json({
-
-            success:false,
-
-            error:error.message
-
-        });
-
+            return res.json({
+                success: true,
+                article: result.article
+            });
+        } catch (error) {
+            console.error("AI publish route error:", error);
+            return res.status(500).json({
+                success: false,
+                error: error.message || "Unable to publish AI content."
+            });
+        }
     }
-
-});
-
+);
 
 
 
-// =====================================
-// Get AI Queue
-// =====================================
 
-router.get("/queue", async(req,res)=>{
+router.get(
+    "/_debug/routes",
+    (req, res) => {
+        const routes = router.stack
+            .filter((layer) => layer.route)
+            .map((layer) => ({
+                path: layer.route.path,
+                methods: layer.route.methods,
+            }));
 
-    try{
+        return res.json({
+            success: true,
+            routes,
+        });
+    }
+);
 
 
-        const {data,error} =
-            await supabase
-            .from("ai_content_queue")
-            .select("*")
-            .order(
-                "scheduled_date",
-                {
-                    ascending:true
-                }
+router.post(
+    "/generate",
+    async (req, res)=>{
+
+        try{
+
+
+            const {
+                title,
+                type,
+                prompt
+            } = req.body;
+
+
+
+            console.log("================================");
+            console.log("PulseAI REQUEST");
+            console.log("MODE: DEVELOPMENT");
+            console.log("Title:", title);
+            console.log("Type:", type);
+            console.log("================================");
+
+
+
+
+
+            if(!title || !type){
+
+                return res.status(400).json({
+
+                    success:false,
+
+                    error:
+                    "Title and type are required."
+
+                });
+
+            }
+
+
+
+
+
+            /*
+                DEVELOPMENT GENERATOR
+
+                OpenAI disabled temporarily.
+
+                This creates placeholder
+                content so we can continue
+                building the CMS workflow.
+            */
+
+
+
+
+
+            const content = `
+
+# ${title}
+
+
+
+## ${type}
+
+
+
+Welcome to PulsePlay's gaming content network.
+
+
+
+
+
+## Overview
+
+
+${title} is generating discussion throughout the gaming community.
+
+
+This PulsePlay article explores the latest information, player reactions, important details, and everything gamers should know.
+
+
+
+
+
+## Gaming Community Reaction
+
+
+Players continue to share opinions, strategies, and experiences surrounding ${title}.
+
+
+The gaming community is always looking forward to updates, announcements, and new ways to enjoy their favorite games.
+
+
+
+
+
+## PulsePlay Analysis
+
+
+Our team takes a closer look at what this means for gamers and what players should watch for next.
+
+
+PulsePlay delivers gaming news, reviews, guides, streams, and community discussions.
+
+
+
+
+
+## Final Thoughts
+
+
+Stay connected with PulsePlay for more gaming content, community updates, and future coverage.
+
+
+
+
+
+${prompt || ""}
+
+
+
+
+
+---
+
+Generated By:
+
+PulseAI Development Mode
+
+
+Status:
+
+Draft Content Preview
+
+
+#PulsePlay #Gaming
+
+            `;
+
+
+
+
+
+
+            return res.json({
+
+                success:true,
+
+                development:true,
+
+                mode:"development",
+
+                content
+
+            });
+
+
+
+
+
+        }
+
+        catch(error){
+
+
+            console.error(
+
+                "PulseAI Development Error:",
+
+                error
+
             );
 
 
 
-        if(error){
+            return res.status(500).json({
 
-            throw error;
+                success:false,
+
+                error:
+
+                "Development content generation failed."
+
+            });
+
 
         }
 
-
-
-        res.json({
-
-            success:true,
-
-            count:data.length,
-
-            queue:data
-
-        });
-
-
-
-    }catch(error){
-
-
-        console.error(
-            "QUEUE ERROR:",
-            error
-        );
-
-
-        res.status(500).json({
-
-            success:false,
-
-            error:error.message
-
-        });
 
     }
 
-});
-
-
-
-
-// =====================================
-// Approve AI Queue Item
-// =====================================
-
-router.post("/approve/:id", async(req,res)=>{
-
-    try{
-
-
-        console.log(
-            "Approving AI item:",
-            req.params.id
-        );
-
-
-
-        const {data,error} =
-            await supabase
-            .from("ai_content_queue")
-            .update({
-
-                status:"approved"
-
-            })
-            .eq(
-                "id",
-                req.params.id
-            )
-            .select()
-            .single();
-
-
-
-        if(error){
-
-            throw error;
-
-        }
-
-
-
-        res.json({
-
-            success:true,
-
-            message:
-            "AI content approved",
-
-            item:data
-
-        });
-
-
-
-    }catch(error){
-
-
-        console.error(
-            "APPROVE ERROR:",
-            error
-        );
-
-
-        res.status(500).json({
-
-            success:false,
-
-            error:error.message
-
-        });
-
-    }
-
-});
-
-
-
-
-// =====================================
-// Publish AI Queue Item
-// =====================================
-
-router.post("/publish/:id", async(req,res)=>{
-
-    try{
-
-
-        console.log(
-            "Publishing AI item:",
-            req.params.id
-        );
-
-
-
-        const {data:item,error} =
-            await supabase
-            .from("ai_content_queue")
-            .select("*")
-            .eq(
-                "id",
-                req.params.id
-            )
-            .single();
-
-
-
-        if(error){
-
-            throw error;
-
-        }
-
-        console.log(
-    "AI ROUTE PUBLISHING ITEM:",
-    item
 );
 
-        const published =
-            await publishAIContent(item);
-
-
-
-        res.json({
-
-            success:true,
-
-            message:
-            "AI content published",
-
-            article:published
-
-        });
-
-
-
-    }catch(error){
-
-
-        console.error(
-            "PUBLISH ERROR:",
-            error
-        );
-
-
-        res.status(500).json({
-
-            success:false,
-
-            error:error.message
-
-        });
-
-    }
-
-});
-
-
-
-
-// =====================================
-// Delete AI Queue Item
-// =====================================
-
-router.delete("/queue/:id", async(req,res)=>{
-
-    try{
-
-
-        const {error} =
-            await supabase
-            .from("ai_content_queue")
-            .delete()
-            .eq(
-                "id",
-                req.params.id
-            );
-
-
-
-        if(error){
-
-            throw error;
-
-        }
-
-
-
-        res.json({
-
-            success:true,
-
-            message:
-            "AI queue item deleted"
-
-        });
-
-
-
-    }catch(error){
-
-
-        console.error(
-            "DELETE QUEUE ERROR:",
-            error
-        );
-
-
-        res.status(500).json({
-
-            success:false,
-
-            error:error.message
-
-        });
-
-    }
-
-});
-
-
-
-
-// =====================================
-// Manual Publish Test
-// =====================================
-
-router.post("/publish-test", async(req,res)=>{
-
-    try{
-
-
-        const testItem = {
-
-            title:
-            "PulsePlay AI Test Article",
-
-
-            body:
-            "This is a test article generated by PulsePlay AI.",
-
-
-            social_caption:
-            "Testing PulsePlay AI publishing system.",
-
-
-            category:
-            "Community",
-
-
-            image_prompt:
-            "Dark futuristic gaming setup with neon purple and cyan lighting"
-
-        };
-
-
-
-        const article =
-            await publishAIContent(testItem);
-
-
-
-        res.json({
-
-            success:true,
-
-            article
-
-        });
-
-
-
-    }catch(error){
-
-
-        console.error(
-            "PUBLISH TEST ERROR:",
-            error
-        );
-
-
-        res.status(500).json({
-
-            success:false,
-
-            error:error.message
-
-        });
-
-    }
-
-});
-
-
-// =====================================
-// Generate AI Image For Queue Item
-// =====================================
-
-router.post("/image/:id", async(req,res)=>{
-
-    try{
-
-
-        console.log(
-            "Generating image for:",
-            req.params.id
-        );
-
-
-
-        const {data:item,error} =
-            await supabase
-            .from("ai_content_queue")
-            .select("*")
-            .eq(
-                "id",
-                req.params.id
-            )
-            .single();
-
-
-
-        if(error){
-
-            throw error;
-
-        }
-
-
-
-        const updated =
-            await generateImageForQueueItem(item);
-
-
-
-        res.json({
-
-            success:true,
-
-            item:updated
-
-        });
-
-
-
-    }catch(error){
-
-
-        console.error(
-            "IMAGE ROUTE ERROR:",
-            error
-        );
-
-
-        res.status(500).json({
-
-            success:false,
-
-            error:error.message
-
-        });
-
-
-    }
-
-});
-
-console.log(
-    "🔥 AI ROUTES READY"
-);
 
 
 export default router;
