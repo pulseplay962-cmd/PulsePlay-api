@@ -42,10 +42,19 @@ export async function processSocialQueueItem(item) {
   const result = await postToFacebook(pageId, pageToken, message, link, item.image_url || null);
 
   // update queue status
-  await supabase
+  const { error: updateError } = await supabase
     .from("social_queue")
-    .update({ status: "posted", posted_response: result, posted_at: new Date().toISOString() })
+    .update({
+      status: "posted",
+      published_at: new Date().toISOString()
+    })
     .eq("id", item.id);
+
+  if (updateError) {
+    throw new Error(
+      `Failed updating social queue item ${item.id}: ${updateError.message}`
+    );
+  }
 
   return result;
 
