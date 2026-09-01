@@ -7,6 +7,7 @@ import cors from "cors";
 import twitchRoutes from "./routes/twitch.js";
 import aiRoutes from "./routes/aiRoutes.js";
 import newsRoutes from "./routes/newsRoutes.js";
+import printfulRoutes from "./routes/printful.js";
 
 
 const app = express();
@@ -171,6 +172,15 @@ app.get(
 app.use(
     "/api/news",
     newsRoutes
+);
+
+console.log(
+    "Printful routes mounted at /api/printful"
+);
+
+app.use(
+    "/api/printful",
+    printfulRoutes
 );
 
 

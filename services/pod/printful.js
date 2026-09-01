@@ -2,32 +2,99 @@ import fetch from "node-fetch";
 
 const API_BASE = "https://api.printful.com";
 
-function authHeader(){
+function getHeaders() {
   const key = process.env.PRINTFUL_API_KEY?.trim();
-  if(!key) throw new Error("Missing PRINTFUL_API_KEY");
-  return { Authorization: `Basic ${Buffer.from(key + ":").toString("base64")}` };
+  const storeId = process.env.PRINTFUL_STORE_ID?.trim();
+
+  if (!key) {
+    throw new Error("Missing PRINTFUL_API_KEY");
+  }
+
+  if (!storeId) {
+    throw new Error("Missing PRINTFUL_STORE_ID");
+  }
+
+  return {
+    Authorization: `Bearer ${key}`,
+    "X-PF-Store-Id": storeId,
+    "Content-Type": "application/json",
+  };
 }
 
-export async function listProducts(){
-  const res = await fetch(`${API_BASE}/store/products`, {
-    headers: { ...authHeader() }
-  });
 
-  if(!res.ok) throw new Error(`Printful error: ${res.status}`);
-  return res.json();
-}
+export async function listProducts() {
 
-export async function createProduct(product){
-  // product: { sync_product } per Printful API
-  const res = await fetch(`${API_BASE}/store/products`, {
-    method: "POST",
-    headers: { ...authHeader(), "Content-Type": "application/json" },
-    body: JSON.stringify(product)
-  });
+  const res = await fetch(
+    `${API_BASE}/store/products`,
+    {
+      method: "GET",
+      headers: getHeaders(),
+    }
+  );
 
   const json = await res.json();
-  if(!res.ok) throw new Error(JSON.stringify(json));
+
+  if (!res.ok) {
+    throw new Error(
+      JSON.stringify(json)
+    );
+  }
+
   return json;
 }
 
-export default { listProducts, createProduct };
+
+export async function getProduct(id) {
+
+  if (!id) {
+    throw new Error("Printful product ID is required");
+  }
+
+  const res = await fetch(
+    `${API_BASE}/store/products/${id}`,
+    {
+      method: "GET",
+      headers: getHeaders(),
+    }
+  );
+
+  const json = await res.json();
+
+  if (!res.ok) {
+    throw new Error(
+      JSON.stringify(json)
+    );
+  }
+
+  return json;
+}
+
+
+export async function createProduct(product) {
+
+  const res = await fetch(
+    `${API_BASE}/store/products`,
+    {
+      method: "POST",
+      headers: getHeaders(),
+      body: JSON.stringify(product),
+    }
+  );
+
+  const json = await res.json();
+
+  if (!res.ok) {
+    throw new Error(
+      JSON.stringify(json)
+    );
+  }
+
+  return json;
+}
+
+
+export default {
+  listProducts,
+  getProduct,
+  createProduct,
+};
