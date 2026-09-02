@@ -8,6 +8,8 @@ import twitchRoutes from "./routes/twitch.js";
 import aiRoutes from "./routes/aiRoutes.js";
 import newsRoutes from "./routes/newsRoutes.js";
 import printfulRoutes from "./routes/printful.js";
+import checkoutRoutes from "./routes/checkout.js";
+import stripeWebhookRoutes from "./routes/stripeWebhook.js";
 
 
 const app = express();
@@ -52,6 +54,17 @@ app.use(
     })
 );
 
+
+
+app.use(
+    "/api/stripe",
+    stripeWebhookRoutes
+);
+
+
+console.log(
+    "Stripe webhook mounted at /api/stripe/webhook"
+);
 
 
 app.use(
@@ -181,6 +194,11 @@ console.log(
 app.use(
     "/api/printful",
     printfulRoutes
+);
+
+app.use(
+    "/api/checkout",
+    checkoutRoutes
 );
 
 
