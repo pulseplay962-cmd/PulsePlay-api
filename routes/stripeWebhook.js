@@ -214,9 +214,7 @@ router.post(
 
         const printfulOrder =
           await createPrintfulOrder({
-            external_id: order.id,
-            update_existing: true,
-
+            external_id: order.id.replace(/-/g, ""),
             recipient: {
               name:
                 customerName,
@@ -256,7 +254,7 @@ router.post(
                 quantity,
               },
             ],
-          });
+          }, { updateExisting: true });
 
         const printfulOrderId =
           printfulOrder?.result?.id;

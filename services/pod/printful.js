@@ -93,7 +93,7 @@ export async function createProduct(product) {
 }
 
 
-export async function createOrder(order) {
+export async function createOrder(order, options = {}) {
   if (!order || !order.recipient) {
     throw new Error('Printful order recipient is required');
   }
@@ -103,7 +103,7 @@ export async function createOrder(order) {
   }
 
   const res = await fetch(
-    API_BASE + '/orders',
+    API_BASE + '/orders' + (options.updateExisting ? '?update_existing=true' : ''),
     {
       method: 'POST',
       headers: getHeaders(),
