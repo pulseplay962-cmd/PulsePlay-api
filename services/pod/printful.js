@@ -93,8 +93,37 @@ export async function createProduct(product) {
 }
 
 
+export async function createOrder(order) {
+  if (!order || !order.recipient) {
+    throw new Error('Printful order recipient is required');
+  }
+
+  if (!Array.isArray(order.items) || order.items.length === 0) {
+    throw new Error('Printful order items are required');
+  }
+
+  const res = await fetch(
+    API_BASE + '/orders',
+    {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify(order),
+    }
+  );
+
+  const json = await res.json();
+
+  if (!res.ok) {
+    throw new Error(JSON.stringify(json));
+  }
+
+  return json;
+}
+
+
 export default {
   listProducts,
   getProduct,
   createProduct,
+  createOrder,
 };
