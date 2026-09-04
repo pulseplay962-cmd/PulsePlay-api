@@ -214,6 +214,9 @@ router.post(
 
         const printfulOrder =
           await createPrintfulOrder({
+            external_id: order.id,
+            update_existing: true,
+
             recipient: {
               name:
                 customerName,
