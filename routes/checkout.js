@@ -137,4 +137,137 @@ router.post("/create-session", async (req, res) => {
   }
 });
 
+
+router.get("/order/:sessionId", async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+
+    if (!sessionId || !sessionId.startsWith("cs_")) {
+      return res.status(400).json({
+        success: false,
+        error: "Invalid checkout session.",
+      });
+    }
+
+    const session = await stripe.checkout.sessions.retrieve(
+      sessionId
+    );
+
+    const { data: order, error: orderError } =
+      await supabase
+        .from("orders")
+        .select(`
+          id,
+          stripe_session_id,
+          stripe_payment_intent_id,
+          merchandise_id,
+          variant_id,
+          quantity,
+          amount_total,
+          currency,
+          status,
+          printful_order_id,
+          created_at,
+          updated_at
+        `)
+        .eq("stripe_session_id", sessionId)
+        .maybeSingle();
+
+    if (orderError) {
+      console.error(
+        "Order lookup failed:",
+        orderError
+      );
+
+      return res.status(500).json({
+        success: false,
+        error: "Unable to retrieve order.",
+      });
+    }
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        error: "Order not found.",
+      });
+    }
+
+    const { data: merchandise, error: merchandiseError } =
+      await supabase
+        .from("merchandise")
+        .select(`
+          id,
+          name,
+          image_url,
+          variants
+        `)
+        .eq("id", order.merchandise_id)
+        .single();
+
+    if (merchandiseError || !merchandise) {
+      console.error(
+        "Merchandise lookup failed:",
+        merchandiseError
+      );
+
+      return res.status(404).json({
+        success: false,
+        error: "Merchandise information not found.",
+      });
+    }
+
+    const variant = (merchandise.variants || []).find(
+      (item) =>
+        Number(item.id) === Number(order.variant_id)
+    );
+
+    return res.json({
+      success: true,
+
+      order: {
+        id: order.id,
+        reference: order.id.slice(0, 8).toUpperCase(),
+        quantity: order.quantity,
+        amount_total: order.amount_total,
+        currency: order.currency,
+        status: order.status,
+        printful_order_id: order.printful_order_id,
+        created_at: order.created_at,
+        updated_at: order.updated_at,
+      },
+
+      merchandise: {
+        id: merchandise.id,
+        name: merchandise.name,
+        image_url: merchandise.image_url || null,
+        variant: variant
+          ? {
+              id: variant.id,
+              name: variant.name,
+              sku: variant.sku || null,
+            }
+          : null,
+      },
+
+      payment: {
+        status: session.payment_status,
+        payment_intent:
+          typeof session.payment_intent === "string"
+            ? session.payment_intent
+            : null,
+      },
+    });
+  } catch (error) {
+    console.error(
+      "Checkout order lookup error:",
+      error?.message || error
+    );
+
+    return res.status(500).json({
+      success: false,
+      error: error?.message || "Unable to retrieve order information.",
+    });
+  }
+});
+
 export default router;
