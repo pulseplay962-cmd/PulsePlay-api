@@ -121,9 +121,33 @@ export async function createOrder(order, options = {}) {
 }
 
 
+export async function confirmOrder(orderId) {
+  if (!orderId) {
+    throw new Error("Printful order ID is required");
+  }
+
+  const res = await fetch(
+    `${API_BASE}/orders/${orderId}/confirm`,
+    {
+      method: "POST",
+      headers: getHeaders(),
+    }
+  );
+
+  const json = await res.json();
+
+  if (!res.ok) {
+    throw new Error(JSON.stringify(json));
+  }
+
+  return json;
+}
+
+
 export default {
   listProducts,
   getProduct,
   createProduct,
   createOrder,
+  confirmOrder,
 };

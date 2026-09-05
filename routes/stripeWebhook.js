@@ -2,7 +2,7 @@ import express from "express";
 import Stripe from "stripe";
 
 import supabase from "../lib/supabase.js";
-import { createOrder as createPrintfulOrder } from "../services/pod/printful.js";
+import { createOrder as createPrintfulOrder, confirmOrder as confirmPrintfulOrder } from "../services/pod/printful.js";
 
 const router = express.Router();
 
