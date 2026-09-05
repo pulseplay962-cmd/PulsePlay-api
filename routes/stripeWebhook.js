@@ -110,7 +110,7 @@ router.post(
         const { data: existingOrder, error: lookupError } =
           await supabase
             .from("orders")
-            .select("id, printful_order_id")
+            .select("id, printful_order_id, status")
             .eq(
               "stripe_session_id",
               session.id
@@ -128,7 +128,7 @@ router.post(
           );
         }
 
-        if (existingOrder?.printful_order_id) {
+        if (existingOrder?.printful_order_id && existingOrder.status === "submitted") {
           console.log(
             "Stripe order already completed:",
             session.id
@@ -297,6 +297,68 @@ router.post(
           "Printful draft order created:",
           printfulOrderId
         );
+
+        const autoConfirmPrintful =
+          process.env.AUTO_CONFIRM_PRINTFUL === "true";
+
+        if (autoConfirmPrintful) {
+          console.log(
+            "AUTO_CONFIRM_PRINTFUL enabled — confirming Printful order:",
+            printfulOrderId
+          );
+
+          const confirmedPrintfulOrder =
+            await confirmPrintfulOrder(
+              Number(printfulOrderId)
+            );
+
+          const confirmedOrderId =
+            confirmedPrintfulOrder?.result?.id;
+
+          if (!confirmedOrderId) {
+            console.error(
+              "Printful confirmation did not return an order ID:",
+              confirmedPrintfulOrder
+            );
+
+            return res.status(500).send(
+              "Printful order confirmation failed."
+            );
+          }
+
+          const { error: confirmationUpdateError } =
+            await supabase
+              .from("orders")
+              .update({
+                status: "submitted",
+                printful_order_id:
+                  Number(confirmedOrderId),
+              })
+              .eq(
+                "id",
+                order.id
+              );
+
+          if (confirmationUpdateError) {
+            console.error(
+              "Supabase confirmation status update failed:",
+              confirmationUpdateError
+            );
+
+            return res.status(500).send(
+              "Failed to record Printful confirmation."
+            );
+          }
+
+          console.log(
+            "Printful order confirmed:",
+            confirmedOrderId
+          );
+        } else {
+          console.log(
+            "AUTO_CONFIRM_PRINTFUL disabled — leaving Printful order as Draft."
+          );
+        }
       }
 
       return res.json({
