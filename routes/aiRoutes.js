@@ -7,6 +7,14 @@ import {
 } from "../services/ai/contentService.js";
 
 import {
+    generateImage
+} from "../services/ai/imageService.js";
+
+import {
+    requireAdmin
+} from "../middleware/adminAuth.js";
+
+import {
     publishAIContent
 } from "../services/ai/publisherService.js";
 
@@ -328,6 +336,78 @@ router.get(
             success: true,
             routes
         });
+
+    }
+);
+
+
+// =====================================
+// REAL OPENAI SINGLE IMAGE TEST
+// =====================================
+
+router.post(
+    "/test-image",
+    requireAdmin,
+    async (req, res) => {
+
+        try {
+
+            const prompt =
+                req.body?.prompt ||
+                "A cinematic futuristic gaming setup with dark neon purple and cyan lighting, premium editorial gaming aesthetic, no logos, no text.";
+
+            console.log(
+                "================================="
+            );
+
+            console.log(
+                "PULSEAI REAL OPENAI IMAGE TEST"
+            );
+
+            console.log(
+                "PROMPT:",
+                prompt
+            );
+
+            console.log(
+                "================================="
+            );
+
+            const imageUrl =
+                await generateImage(
+                    prompt
+                );
+
+            return res.json({
+
+                success: true,
+
+                development: false,
+
+                mode: "openai",
+
+                imageUrl
+
+            });
+
+        } catch (error) {
+
+            console.error(
+                "PULSEAI IMAGE TEST ERROR:",
+                error
+            );
+
+            return res.status(500).json({
+
+                success: false,
+
+                error:
+                    error.message ||
+                    "AI image generation failed."
+
+            });
+
+        }
 
     }
 );
