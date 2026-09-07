@@ -1349,6 +1349,47 @@ This test content does not use OpenAI and does not represent verified gaming new
 
 
 // =====================================
+// Clean Generated Article
+// =====================================
+
+function cleanAIArticle(article) {
+
+    if (!article || typeof article !== "object") {
+        return article;
+    }
+
+    return {
+        ...article,
+
+        title:
+            cleanAIText(article.title),
+
+        metaDescription:
+            cleanAIText(article.metaDescription),
+
+        article:
+            cleanAIText(article.article),
+
+        facebookPost:
+            cleanAIText(article.facebookPost),
+
+        imagePrompt:
+            cleanAIText(article.imagePrompt),
+
+        hashtags:
+            Array.isArray(article.hashtags)
+                ? article.hashtags.map((tag) =>
+                    typeof tag === "string"
+                        ? tag.trim()
+                        : tag
+                )
+                : article.hashtags
+    };
+
+}
+
+
+// =====================================
 // Generate Single Article
 // =====================================
 
@@ -1617,14 +1658,15 @@ export async function generateArticle(
             });
 
 
-        return parseAIResponse(
+        const parsedArticle =
+            parseAIResponse(
+                response
+                    .choices[0]
+                    .message
+                    .content
+            );
 
-            response
-                .choices[0]
-                .message
-                .content
-
-        );
+        return cleanAIArticle(parsedArticle);
 
     } catch (error) {
 
