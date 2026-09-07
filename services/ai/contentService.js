@@ -197,7 +197,13 @@ function cleanAIText(text = "") {
 
         // Fix common punctuation spacing.
         .replace(
-            /([,.!?])([A-Za-z])/g,
+            /([,:;.!?])([A-Za-z])/g,
+            "$1 $2"
+        )
+
+        // Fix common missing spaces before markdown headings.
+        .replace(
+            /([a-z])(#{2,6})/g,
             "$1 $2"
         )
 
