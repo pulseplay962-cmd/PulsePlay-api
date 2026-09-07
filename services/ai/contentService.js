@@ -1446,6 +1446,22 @@ export async function generateArticle(
 
         "",
 
+        "FORMATTING RULES:",
+
+        "Use normal spaces between every word.",
+
+        "Never merge two words together.",
+
+        "Always place a space after punctuation when appropriate.",
+
+        "Keep words such as gaming, multiplayer, community, hardware, and technology properly separated.",
+
+        "Use clean, natural paragraph spacing.",
+
+        "Do not remove spaces between words during generation.",
+
+        "",
+
         "CURRENT YEAR: 2026",
 
         "",
