@@ -1,4 +1,5 @@
 import express from "express";
+import { requireAdmin } from "../middleware/adminAuth.js";
 import {
   listProducts,
   getProduct,
@@ -47,7 +48,7 @@ router.get("/products/:id", async (req, res) => {
  * Existing Printful products are updated by printful_id.
  * Missing products are inserted.
  */
-router.post("/sync-merchandise", async (req, res) => {
+router.post("/sync-merchandise", requireAdmin, async (req, res) => {
   try {
     console.log("Starting Printful merchandise sync...");
 
