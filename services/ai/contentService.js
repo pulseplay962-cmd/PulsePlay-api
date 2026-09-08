@@ -187,6 +187,10 @@ function normalizeResearchText(text = "") {
 
 function cleanAIText(text = "") {
 
+    if (text === null || text === undefined) {
+        return "";
+    }
+
     return String(text)
 
         // Fix common missing spaces between words.
@@ -195,31 +199,38 @@ function cleanAIText(text = "") {
             "$1 $2"
         )
 
-        // Fix common punctuation spacing.
+        // Fix punctuation immediately followed by a word.
+        // Do not alter newlines or Markdown structure.
         .replace(
             /([,:;.!?])([A-Za-z])/g,
             "$1 $2"
         )
 
-        // Fix common missing spaces before markdown headings.
+        // Ensure Markdown headings are separated from preceding text.
         .replace(
-            /([a-z])(#{2,6})/g,
-            "$1 $2"
+            /([^\n])(\#{1,6}\s)/g,
+            "$1\n\n$2"
         )
 
-        // Normalize excessive whitespace.
+        // Normalize Windows line endings.
         .replace(
-            /[ \t]+/g,
-            " "
+            /\r\n/g,
+            "\n"
         )
 
+        // Remove trailing spaces from individual lines.
+        .replace(
+            /[ \t]+$/gm,
+            ""
+        )
+
+        // Prevent excessive blank lines.
         .replace(
             /\n{3,}/g,
             "\n\n"
         )
 
         .trim();
-
 }
 
 
