@@ -191,46 +191,71 @@ function cleanAIText(text = "") {
         return "";
     }
 
-    return String(text)
+    let result = String(text);
 
-        // Fix common missing spaces between words.
-        .replace(
-            /([a-z])([A-Z])/g,
-            "$1 $2"
-        )
+    // Normalize line endings.
+    result = result.replace(/\r\n/g, "\n");
 
-        // Fix punctuation immediately followed by a word.
-        // Do not alter newlines or Markdown structure.
-        .replace(
-            /([,:;.!?])([A-Za-z])/g,
-            "$1 $2"
-        )
+    // Clean each line individually.
+    const lines = result.split("\n");
 
-        // Ensure Markdown headings are separated from preceding text.
-        .replace(
-            /([^\n])(\#{1,6}\s)/g,
-            "$1\n\n$2"
-        )
+    const cleanedLines = [];
 
-        // Normalize Windows line endings.
-        .replace(
-            /\r\n/g,
-            "\n"
-        )
+    for (const line of lines) {
 
-        // Remove trailing spaces from individual lines.
-        .replace(
-            /[ \t]+$/gm,
-            ""
-        )
+        const trimmed = line.trim();
 
-        // Prevent excessive blank lines.
-        .replace(
-            /\n{3,}/g,
-            "\n\n"
-        )
+        // Remove standalone Markdown heading markers.
+        if (
+            /^#{1,6}$/.test(trimmed)
+        ) {
+            continue;
+        }
 
-        .trim();
+        // Remove empty whitespace-only lines temporarily.
+        if (trimmed === "") {
+            cleanedLines.push("");
+            continue;
+        }
+
+        cleanedLines.push(
+            line.replace(/[ \t]+$/g, "")
+        );
+    }
+
+    result = cleanedLines.join("\n");
+
+    // Fix common missing spaces between words.
+    result = result.replace(
+        /([a-z])([A-Z])/g,
+        "$1 $2"
+    );
+
+    // Fix punctuation immediately followed by a word.
+    result = result.replace(
+        /([,:;.!?])([A-Za-z])/g,
+        "$1 $2"
+    );
+
+    // Ensure Markdown headings have spacing before them.
+    result = result.replace(
+        /([^\n])(\#{1,6}\s)/g,
+        "$1\n\n$2"
+    );
+
+    // Remove trailing spaces from lines.
+    result = result.replace(
+        /[ \t]+$/gm,
+        ""
+    );
+
+    // Collapse excessive blank lines.
+    result = result.replace(
+        /\n{3,}/g,
+        "\n\n"
+    );
+
+    return result.trim();
 }
 
 
@@ -1375,6 +1400,84 @@ function cleanAIArticle(article) {
         return article;
     }
 
+    let cleanedArticle =
+        cleanAIText(article.article);
+
+    // Remove an AI-generated SEO keyword block
+    // that does not belong inside the article.
+    cleanedArticle =
+        cleanedArticle.replace(
+            /\n+(?:#{1,6}\s*)?SEO Keywords\s*\n[\s\S]*$/i,
+            ""
+        );
+
+    // Remove a trailing plain "Keywords:" line.
+    cleanedArticle =
+        cleanedArticle.replace(
+            /\n+Keywords:\s*[^\n]*(?:\n[\s\S]*)?$/i,
+            ""
+        );
+
+    // Fix only safe, known AI word-merging patterns.
+    cleanedArticle =
+        cleanedArticle.replace(
+            /\b(CPU|GPU|SSD|RAM|HDMI|VRR|AR|VR|PC|TV)([a-z])/g,
+            "$1 $2"
+        );
+
+    // Fix punctuation attached directly to the next word.
+    cleanedArticle =
+        cleanedArticle.replace(
+            /([,;:!?])([A-Za-z])/g,
+            "$1 $2"
+        );
+
+    // Normalize article heading hierarchy.
+    // The first H1 remains the article title.
+    // Later single-hash headings become H2 sections.
+    const articleLines = cleanedArticle.split("\n");
+    let foundH1 = false;
+
+    cleanedArticle =
+        articleLines
+            .filter((line) => !/^\s*#{1,6}\s*$/.test(line))
+            .map((line) => {
+                const match = line.match(/^\s*#\s+(.+)$/);
+
+                if (!match) {
+                    return line;
+                }
+
+                if (!foundH1) {
+                    foundH1 = true;
+                    return `# ${match[1].trim()}`;
+                }
+
+                return `## ${match[1].trim()}`;
+            })
+            .join("\n");
+
+    // Fix only known, safe formatting artifacts.
+    cleanedArticle =
+        cleanedArticle
+            .replace(/playstyles\.These/g, "playstyles. These")
+            .replace(/TV s/g, "TVs")
+            .replace(/GPU s/g, "GPUs")
+            .replace(/SSD s/g, "SSDs")
+            .replace(/Latency:The/g, "Latency: The")
+            .replace(/comparablecontrast/g, "comparable contrast")
+            .replace(/withoutexcessive/g, "without excessive")
+            .replace(/Virtualreality/g, "Virtual reality")
+            .replace(/StandaloneVR/g, "Standalone VR")
+            .replace(/devicesbased/g, "devices based");
+
+    // Remove accidental duplicate blank lines.
+    cleanedArticle =
+        cleanedArticle.replace(
+            /\n{3,}/g,
+            "\n\n"
+        );
+
     return {
         ...article,
 
@@ -1385,7 +1488,7 @@ function cleanAIArticle(article) {
             cleanAIText(article.metaDescription),
 
         article:
-            cleanAIText(article.article),
+            cleanedArticle.trim(),
 
         facebookPost:
             cleanAIText(article.facebookPost),
@@ -1395,11 +1498,13 @@ function cleanAIArticle(article) {
 
         hashtags:
             Array.isArray(article.hashtags)
-                ? article.hashtags.map((tag) =>
-                    typeof tag === "string"
-                        ? tag.trim()
-                        : tag
-                )
+                ? article.hashtags
+                    .filter((tag) =>
+                        typeof tag === "string" &&
+                        tag.trim() !== ""
+                    )
+                    .map((tag) => tag.trim())
+                    .slice(0, 6)
                 : article.hashtags
     };
 
@@ -1450,211 +1555,151 @@ export async function generateArticle(
 
 
     const articlePrompt = [
-
         "You are the PulsePlay AI Content Manager.",
-
         "",
-
         "Create premium gaming content for PulsePlay.online.",
-
+        "Write like an experienced gaming editor speaking to real gamers.",
+        "Make every piece natural, polished, useful, engaging, and easy to read.",
+        "Avoid robotic writing, filler, repetitive phrases, and exaggerated claims.",
         "",
-
-        "The content must be useful, engaging, accurate, and written for real gamers.",
-
-        "",
-
-        "FORMATTING RULES:",
-
+        "WRITING QUALITY:",
+        "Use complete sentences.",
         "Use normal spaces between every word.",
-
-        "Never merge two words together.",
-
-        "Always place a space after punctuation when appropriate.",
-
-        "Keep words such as gaming, multiplayer, community, hardware, and technology properly separated.",
-
-        "Use clean, natural paragraph spacing.",
-
-        "Do not remove spaces between words during generation.",
-
+        "Never merge words together.",
+        "Never remove spaces between words.",
+        "Use correct punctuation and paragraph spacing.",
+        "Proofread the complete response before returning it.",
+        "Avoid repeating the same sentence structure.",
         "",
-
+        "MARKDOWN:",
+        "The article field must use clean Markdown.",
+        "Use exactly one H1 heading at the beginning.",
+        "Use H2 headings for major sections.",
+        "Use H3 headings only when genuinely useful.",
+        "Never create an empty heading.",
+        "Never output a standalone '#', '##', or '###'.",
+        "Always place heading text on the same line as its heading marker.",
+        "Leave a blank line before and after headings.",
+        "Separate paragraphs with blank lines.",
+        "Use bullet lists or numbered lists when they improve readability.",
+        "Do not use HTML.",
+        "Do not wrap the article in a code block.",
+        "",
         "CURRENT YEAR: 2026",
-
         "",
-
         "Schedule:",
-
         "",
-
         "Day:",
         today,
-
         "",
-
         "Website Content Type:",
         schedule?.website || "",
-
         "",
-
         "Facebook Purpose:",
         schedule?.facebook || "",
-
         "",
-
         "Topic:",
         topic || "",
-
         "",
-
-
-        // =====================================
-        // ACCURACY RULES
-        // =====================================
-
-        "STRICT ACCURACY RULES:",
-
+        "ACCURACY:",
+        "Never invent gaming news.",
+        "Never invent release dates.",
+        "Never invent developer or publisher statements.",
+        "Never invent quotes.",
+        "Never invent statistics.",
+        "Never invent game features.",
+        "Never invent patches or updates.",
+        "Never present speculation as confirmed fact.",
+        "Clearly distinguish confirmed information from analysis or speculation.",
+        "Never claim information is current unless supported by reliable information.",
+        "Do not present 2024 information as current.",
+        "Do not present 2025 information as current.",
+        "The current year is 2026.",
         "",
-
-        "- Never invent gaming news.",
-
-        "- Never invent release dates.",
-
-        "- Never invent developer or publisher statements.",
-
-        "- Never invent quotes.",
-
-        "- Never invent statistics.",
-
-        "- Never invent game features.",
-
-        "- Never invent patches or updates.",
-
-        "- Never present speculation as confirmed fact.",
-
-        "- Never claim something is current unless supported by reliable information.",
-
-        "- Do not use 2024 as the current year.",
-
-        "- Do not present 2025 information as current.",
-
-        "- The current year is 2026.",
-
+        "RETURN JSON ONLY.",
+        "Do not include Markdown fences around the JSON.",
+        "Do not include commentary before or after the JSON.",
         "",
-
-
-        // =====================================
-        // OUTPUT
-        // =====================================
-
-        "Return JSON ONLY.",
-
-        "",
-
-        "FORMAT:",
-
-        "",
-
+        "OUTPUT FORMAT:",
         "{",
-
         '  "title": "",',
-
         '  "metaDescription": "",',
-
         '  "article": "",',
-
         '  "facebookPost": "",',
-
         '  "imagePrompt": "",',
-
         '  "hashtags": []',
-
         "}",
-
         "",
-
-
-        // =====================================
-        // ARTICLE REQUIREMENTS
-        // =====================================
-
-        "REQUIREMENTS:",
-
-        "",
-
         "TITLE:",
-
-        "Create an SEO-friendly gaming headline.",
-
+        "Create a specific, compelling, SEO-friendly gaming headline.",
+        "Do not use clickbait.",
         "",
-
         "META DESCRIPTION:",
-
-        "Write a compelling SEO meta description.",
-
+        "Write a concise SEO description that accurately summarizes the content.",
         "",
-
         "ARTICLE:",
-
-        "Write approximately 800-1200 words when the content type is an article.",
-
+        "For article content, write approximately 800-1200 words.",
+        "Begin with a strong introduction.",
+        "Use multiple useful H2 sections.",
+        "Provide specific and practical gaming information.",
+        "Include analysis or context when appropriate.",
+        "Include a natural community discussion question near the end.",
+        "Finish with concise final thoughts.",
+        "Do not add filler just to reach the word count.",
+        "Do not create an SEO Keywords section.",
+        "Do not add a Keywords section or keyword list at the end.",
+        "Do not add a promotional PulsePlay brand paragraph after the article.",
         "",
-
-        "Use:",
-
-        "- A strong introduction",
-
-        "- Clear section headings",
-
-        "- Useful gaming information",
-
-        "- Analysis or practical information",
-
-        "- A natural community discussion question",
-
-        "- Relevant SEO keywords",
-
-        "",
-
         "COMMUNITY POLLS:",
-
-        "If the content type is a community poll, create a concise discussion-focused post and a clear question with possible responses.",
-
+        "Create a concise discussion-focused post with a clear question and possible responses.",
+        "Do not turn a poll into a long article.",
         "",
-
         "GAMING NEWS:",
-
-        "Focus on meaningful developments and avoid sensationalism.",
-
+        "Focus on meaningful developments.",
+        "Separate confirmed facts from analysis and speculation.",
+        "Avoid sensationalism.",
         "",
-
         "GAMING TIPS:",
-
-        "Provide practical information gamers can actually use.",
-
+        "Give practical advice gamers can actually use.",
+        "Use clear steps and examples when helpful.",
         "",
-
+        "WEEKEND RECOMMENDATIONS:",
+        "Recommend games or gaming activities relevant to the topic.",
+        "Explain why each recommendation is worth considering.",
+        "",
+        "GAMING GEAR:",
+        "Focus on practical value, features, use cases, and buying considerations.",
+        "Never invent specifications or prices.",
+        "",
         "FACEBOOK:",
-
-        "Create an engagement-focused social post that encourages discussion without sounding like an advertisement.",
-
+        "Create a concise engagement-focused social post.",
+        "Encourage comments and discussion naturally.",
+        "Do not simply copy the article.",
+        "Do not make it sound like an advertisement.",
         "",
-
         "IMAGE PROMPT:",
-
-        "Create a detailed cinematic gaming artwork prompt following the PulsePlay visual identity.",
-
+        "Create a detailed cinematic gaming artwork prompt matching the PulsePlay visual identity.",
+        "Use a dark neon gaming aesthetic, cinematic lighting, premium editorial composition, and strong depth.",
+        "Do not include text, logos, watermarks, or readable words.",
+        "The artwork should visually represent the article topic.",
         "",
-
         "HASHTAGS:",
-
-        "Return relevant gaming hashtags as an array.",
-
+        "Return exactly 6 relevant gaming hashtags as an array.",
+        "Do not include unrelated hashtags.",
         "",
-
+        "FINAL QUALITY CHECK:",
+        "Check every word for proper spacing.",
+        "Check punctuation and readability.",
+        "Check for accidentally merged words.",
+        "Check that every Markdown heading has text on the same line.",
+        "Check that there are no standalone heading markers.",
+        "Check that paragraphs are properly separated.",
+        "Check for unsupported factual claims.",
+        "Check that the JSON is valid.",
+        "Return JSON ONLY.",
+        "",
         "Brand:",
         pulsePlayBrand
-
     ].join("\n");
 
 
