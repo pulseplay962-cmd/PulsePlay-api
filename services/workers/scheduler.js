@@ -2,6 +2,7 @@ import { pollAndPublishTwitch } from "./twitchPoller.js";
 import { processSocialQueueItem } from "./facebookPoster.js";
 import { supabase } from "../../lib/supabase.js";
 import { generateAndSaveWeeklyContent } from "../ai/contentService.js";
+import { cleanupAIQueue } from "../ai/queueCleanupService.js";
 
 
 // =====================================
@@ -169,6 +170,24 @@ export async function runOnce() {
   console.log(
     "================================="
   );
+
+
+  // =====================================
+  // AI Queue Cleanup
+  // =====================================
+
+  try {
+
+    await cleanupAIQueue();
+
+  } catch (err) {
+
+    console.error(
+      "AI queue cleanup error:",
+      err
+    );
+
+  }
 
 
   // =====================================
