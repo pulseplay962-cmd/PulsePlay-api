@@ -3,8 +3,11 @@ import fetch from "node-fetch";
 /**
  * PulseAI Gaming Research Service
  *
- * Fetches current gaming news from public RSS feeds.
- * This service researches facts; it does NOT generate content.
+ * Fetches current gaming news and release information
+ * from multiple public RSS feeds.
+ *
+ * This service researches facts.
+ * It does NOT generate content.
  */
 
 const NEWS_SOURCES = [
@@ -15,8 +18,30 @@ const NEWS_SOURCES = [
     {
         name: "Eurogamer",
         url: "https://www.eurogamer.net/feed"
+    },
+    {
+        name: "PlayStation Blog",
+        url: "https://blog.playstation.com/feed/"
+    },
+    {
+        name: "Xbox Wire",
+        url: "https://news.xbox.com/en-us/feed/"
+    },
+    {
+        name: "PC Gamer",
+        url: "https://www.pcgamer.com/rss/"
+    },
+    {
+        name: "GamesRadar",
+        url: "https://www.gamesradar.com/rss/"
+    },
+    {
+        name: "Nintendo Life",
+        url: "https://www.nintendolife.com/feeds/latest"
     }
 ];
+
+const ARTICLES_PER_SOURCE = 75;
 
 function decodeHtml(text = "") {
 
@@ -61,9 +86,20 @@ function getItems(xml) {
     );
 }
 
+function normalizeUrl(url = "") {
+
+    return String(url)
+        .trim()
+        .replace(/&amp;/gi, "&");
+}
+
 async function fetchSource(source) {
 
     try {
+
+        console.log(
+            `RESEARCH SOURCE: ${source.name}`
+        );
 
         const response =
             await fetch(
@@ -87,30 +123,57 @@ async function fetchSource(source) {
         const xml =
             await response.text();
 
-        return getItems(xml)
-            .slice(0, 15)
-            .map(item => ({
+        const items =
+            getItems(xml)
+                .slice(
+                    0,
+                    ARTICLES_PER_SOURCE
+                );
 
-                source:
-                    source.name,
+        const articles =
+            items
+                .map(item => ({
 
-                title:
-                    getTag(item, "title"),
+                    source:
+                        source.name,
 
-                url:
-                    getTag(item, "link"),
+                    title:
+                        getTag(
+                            item,
+                            "title"
+                        ),
 
-                published_at:
-                    getTag(item, "pubDate"),
+                    url:
+                        normalizeUrl(
+                            getTag(
+                                item,
+                                "link"
+                            )
+                        ),
 
-                summary:
-                    getTag(item, "description")
+                    published_at:
+                        getTag(
+                            item,
+                            "pubDate"
+                        ),
 
-            }))
-            .filter(item =>
-                item.title &&
-                item.url
-            );
+                    summary:
+                        getTag(
+                            item,
+                            "description"
+                        )
+
+                }))
+                .filter(item =>
+                    item.title &&
+                    item.url
+                );
+
+        console.log(
+            `${source.name}: ${articles.length} articles`
+        );
+
+        return articles;
 
     } catch (error) {
 
@@ -121,6 +184,29 @@ async function fetchSource(source) {
 
         return [];
     }
+}
+
+function deduplicateArticles(articles) {
+
+    const seen = new Set();
+
+    return articles.filter(article => {
+
+        const key =
+            article.url ||
+            article.title
+                .toLowerCase()
+                .trim();
+
+        if (seen.has(key)) {
+
+            return false;
+        }
+
+        seen.add(key);
+
+        return true;
+    });
 }
 
 export async function researchGamingNews() {
@@ -137,18 +223,27 @@ export async function researchGamingNews() {
         "================================="
     );
 
+    console.log(
+        "RESEARCH SOURCES:",
+        NEWS_SOURCES.length
+    );
+
     const results =
         await Promise.all(
-            NEWS_SOURCES.map(fetchSource)
+            NEWS_SOURCES.map(
+                fetchSource
+            )
         );
 
     const articles =
-        results
-            .flat()
-            .filter(article =>
-                article.title &&
-                article.url
-            );
+        deduplicateArticles(
+            results
+                .flat()
+                .filter(article =>
+                    article.title &&
+                    article.url
+                )
+        );
 
     console.log(
         "RESEARCH ARTICLES:",
