@@ -11,6 +11,7 @@ import printfulRoutes from "./routes/printful.js";
 import checkoutRoutes from "./routes/checkout.js";
 import stripeWebhookRoutes from "./routes/stripeWebhook.js";
 import monetizationRoutes from "./routes/monetization.js";
+import recommendationsRoutes from "./routes/recommendations.js";
 
 const app = express();
 
@@ -126,6 +127,17 @@ app.use(
 
 console.log(
     "Monetization routes mounted at /api/monetization"
+);
+
+console.log("Loading affiliate recommendation routes...");
+
+app.use(
+    "/api/recommendations",
+    recommendationsRoutes
+);
+
+console.log(
+    "Affiliate recommendation routes mounted at /api/recommendations"
 );
 
 console.log("Printful routes mounted at /api/printful");
