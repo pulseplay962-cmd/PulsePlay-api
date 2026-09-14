@@ -10,186 +10,125 @@ import newsRoutes from "./routes/newsRoutes.js";
 import printfulRoutes from "./routes/printful.js";
 import checkoutRoutes from "./routes/checkout.js";
 import stripeWebhookRoutes from "./routes/stripeWebhook.js";
-
+import monetizationRoutes from "./routes/monetization.js";
 
 const app = express();
 
-
 const PORT = process.env.PORT || 5000;
-
-
-
 
 // ========================
 // Middleware
 // ========================
 
-
 app.use(
     cors({
-
-        origin:[
+        origin: [
             "http://localhost:5173",
             "http://localhost:5174",
             "https://pulseplay-v2-f0wz.onrender.com",
             "https://pulseplay.online",
             "https://www.pulseplay.online"
         ],
-
-        credentials:true,
-
-        methods:[
+        credentials: true,
+        methods: [
             "GET",
             "POST",
             "PUT",
             "DELETE",
             "OPTIONS"
         ],
-
-        allowedHeaders:[
+        allowedHeaders: [
             "Content-Type",
             "Authorization"
         ]
-
     })
 );
-
-
 
 app.use(
     "/api/stripe",
     stripeWebhookRoutes
 );
 
-
 console.log(
     "Stripe webhook mounted at /api/stripe/webhook"
 );
 
-
-app.use(
-    express.json()
-);
-
-
-
-
-
+app.use(express.json());
 
 // ========================
 // Health Checks
 // ========================
 
-
 app.get(
     "/",
-    (req,res)=>{
-
+    (req, res) => {
         res.json({
-
-            success:true,
-
-            message:"PulsePlay API is running 🚀"
-
+            success: true,
+            message: "PulsePlay API is running 🚀"
         });
-
     }
 );
-
-
-
-
 
 app.get(
     "/api/health",
-    (req,res)=>{
-
+    (req, res) => {
         res.json({
-
-            status:"ok",
-
-            service:"PulsePlay API"
-
+            status: "ok",
+            service: "PulsePlay API"
         });
-
     }
 );
-
-
-
-
-
-
 
 // ========================
 // Routes
 // ========================
 
-
-console.log(
-    "Loading Twitch routes..."
-);
-
+console.log("Loading Twitch routes...");
 
 app.use(
     "/api/twitch",
     twitchRoutes
 );
 
-
-
-
-
-console.log(
-    "Loading AI routes..."
-);
-
+console.log("Loading AI routes...");
 
 app.use(
     "/api/ai",
     aiRoutes
 );
 
+console.log("AI routes mounted at /api/ai");
 
-console.log(
-    "AI routes mounted at /api/ai"
-);
-
-
-
-
-
-console.log(
-    "Loading News routes..."
-);
-
+console.log("Loading News routes...");
 
 // TEMP TEST ROUTE
 app.get(
     "/api/news/direct-test",
-    (req,res)=>{
-
+    (req, res) => {
         res.json({
-
-            success:true,
-
-            message:"Direct server news route works"
-
+            success: true,
+            message: "Direct server news route works"
         });
-
     }
 );
-
-
 
 app.use(
     "/api/news",
     newsRoutes
 );
 
-console.log(
-    "Printful routes mounted at /api/printful"
+console.log("Loading monetization routes...");
+
+app.use(
+    "/api/monetization",
+    monetizationRoutes
 );
+
+console.log(
+    "Monetization routes mounted at /api/monetization"
+);
+
+console.log("Printful routes mounted at /api/printful");
 
 app.use(
     "/api/printful",
@@ -201,63 +140,37 @@ app.use(
     checkoutRoutes
 );
 
-
-
-console.log(
-    "News routes mounted at /api/news"
-);
-
-
-
-
-
-
+console.log("News routes mounted at /api/news");
 
 // ========================
 // Error Handler
 // ========================
 
-
 app.use(
-    (err,req,res,next)=>{
-
+    (err, req, res, next) => {
         console.error(
             "Server Error:",
             err
         );
 
-
         res.status(500).json({
-
-            success:false,
-
+            success: false,
             error:
-            err.message ||
-            "Internal server error"
-
+                err.message ||
+                "Internal server error"
         });
-
     }
 );
-
-
-
-
-
-
 
 // ========================
 // Start Server
 // ========================
 
-
 app.listen(
     PORT,
-    ()=>{
-
+    () => {
         console.log(
             `PulsePlay API running on port ${PORT}`
         );
-
     }
 );
