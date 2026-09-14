@@ -9,6 +9,41 @@ const supabase = createClient(
     process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
+const ALLOWED_STATUSES = new Set(["active", "inactive"]);
+
+function cleanString(value, maxLength = 500) {
+    if (typeof value !== "string") return null;
+    const trimmed = value.trim();
+    return trimmed ? trimmed.slice(0, maxLength) : null;
+}
+
+function isValidHttpUrl(value) {
+    try {
+        const url = new URL(value);
+        return url.protocol === "http:" || url.protocol === "https:";
+    } catch {
+        return false;
+    }
+}
+
+async function getProductDetails(productIds) {
+    const ids = [...new Set((productIds || []).filter(Boolean))];
+
+    if (!ids.length) return {};
+
+    const { data, error } = await supabase
+        .from("products")
+        .select("id, name, description, price, image, category")
+        .in("id", ids);
+
+    if (error) {
+        console.error("Affiliate product lookup error:", error);
+        return {};
+    }
+
+    return Object.fromEntries((data || []).map((product) => [product.id, product]));
+}
+
 // Public affiliate redirect + click tracking.
 // The affiliate destination stays server-side so the frontend does not
 // need direct access to affiliate URLs.
@@ -57,8 +92,6 @@ router.get("/go/:id", async (req, res) => {
                 ? req.get("referer").slice(0, 1000)
                 : null;
 
-        // Log the click. A failed analytics insert must not prevent the
-        // customer from reaching the merchant.
         const { error: clickError } = await supabase
             .from("affiliate_clicks")
             .insert({
@@ -79,8 +112,6 @@ router.get("/go/:id", async (req, res) => {
             { link_id: link.id }
         );
 
-        // The RPC is intentionally optional for the first deployment. If it
-        // does not exist yet, the click event above is still recorded.
         if (incrementError) {
             console.warn(
                 "Affiliate click counter RPC unavailable:",
@@ -94,6 +125,270 @@ router.get("/go/:id", async (req, res) => {
         return res.status(500).json({
             success: false,
             error: "Unable to process affiliate link."
+        });
+    }
+});
+
+// Admin: list affiliate links for management.
+router.get("/links", requireAdmin, async (req, res) => {
+    try {
+        const { data: links, error } = await supabase
+            .from("affiliate_links")
+            .select(
+                "id, product_id, network, merchant, affiliate_url, tracking_code, status, clicks, conversions, revenue, created_at, updated_at"
+            )
+            .order("created_at", { ascending: false });
+
+        if (error) {
+            throw error;
+        }
+
+        const products = await getProductDetails(
+            (links || []).map((link) => link.product_id)
+        );
+
+        return res.json({
+            success: true,
+            links: (links || []).map((link) => ({
+                ...link,
+                product: link.product_id ? products[link.product_id] || null : null
+            }))
+        });
+    } catch (error) {
+        console.error("Affiliate links load error:", error);
+        return res.status(500).json({
+            success: false,
+            error: error.message || "Unable to load affiliate links."
+        });
+    }
+});
+
+// Admin: create an affiliate link.
+router.post("/links", requireAdmin, async (req, res) => {
+    try {
+        const productId = cleanString(req.body?.product_id, 100);
+        const network = cleanString(req.body?.network, 100);
+        const merchant = cleanString(req.body?.merchant, 150);
+        const affiliateUrl = cleanString(req.body?.affiliate_url, 2000);
+        const trackingCode = cleanString(req.body?.tracking_code, 300);
+        const status = cleanString(req.body?.status, 20) || "active";
+
+        if (!network) {
+            return res.status(400).json({
+                success: false,
+                error: "Affiliate network is required."
+            });
+        }
+
+        if (!affiliateUrl || !isValidHttpUrl(affiliateUrl)) {
+            return res.status(400).json({
+                success: false,
+                error: "A valid http or https affiliate URL is required."
+            });
+        }
+
+        if (!ALLOWED_STATUSES.has(status)) {
+            return res.status(400).json({
+                success: false,
+                error: "Status must be active or inactive."
+            });
+        }
+
+        if (productId) {
+            const { data: product, error: productError } = await supabase
+                .from("products")
+                .select("id")
+                .eq("id", productId)
+                .maybeSingle();
+
+            if (productError) throw productError;
+
+            if (!product) {
+                return res.status(400).json({
+                    success: false,
+                    error: "Selected product was not found."
+                });
+            }
+        }
+
+        const { data, error } = await supabase
+            .from("affiliate_links")
+            .insert({
+                product_id: productId || null,
+                network,
+                merchant,
+                affiliate_url: affiliateUrl,
+                tracking_code: trackingCode,
+                status
+            })
+            .select(
+                "id, product_id, network, merchant, affiliate_url, tracking_code, status, clicks, conversions, revenue, created_at, updated_at"
+            )
+            .single();
+
+        if (error) throw error;
+
+        return res.status(201).json({
+            success: true,
+            link: data
+        });
+    } catch (error) {
+        console.error("Affiliate link create error:", error);
+        return res.status(500).json({
+            success: false,
+            error: error.message || "Unable to create affiliate link."
+        });
+    }
+});
+
+// Admin: update an affiliate link.
+router.put("/links/:id", requireAdmin, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const updates = {};
+
+        if (req.body?.product_id !== undefined) {
+            const productId = cleanString(req.body.product_id, 100);
+
+            if (productId) {
+                const { data: product, error: productError } = await supabase
+                    .from("products")
+                    .select("id")
+                    .eq("id", productId)
+                    .maybeSingle();
+
+                if (productError) throw productError;
+
+                if (!product) {
+                    return res.status(400).json({
+                        success: false,
+                        error: "Selected product was not found."
+                    });
+                }
+            }
+
+            updates.product_id = productId || null;
+        }
+
+        if (req.body?.network !== undefined) {
+            const network = cleanString(req.body.network, 100);
+            if (!network) {
+                return res.status(400).json({
+                    success: false,
+                    error: "Affiliate network cannot be empty."
+                });
+            }
+            updates.network = network;
+        }
+
+        if (req.body?.merchant !== undefined) {
+            updates.merchant = cleanString(req.body.merchant, 150);
+        }
+
+        if (req.body?.affiliate_url !== undefined) {
+            const affiliateUrl = cleanString(req.body.affiliate_url, 2000);
+
+            if (!affiliateUrl || !isValidHttpUrl(affiliateUrl)) {
+                return res.status(400).json({
+                    success: false,
+                    error: "A valid http or https affiliate URL is required."
+                });
+            }
+
+            updates.affiliate_url = affiliateUrl;
+        }
+
+        if (req.body?.tracking_code !== undefined) {
+            updates.tracking_code = cleanString(req.body.tracking_code, 300);
+        }
+
+        if (req.body?.status !== undefined) {
+            const status = cleanString(req.body.status, 20);
+
+            if (!status || !ALLOWED_STATUSES.has(status)) {
+                return res.status(400).json({
+                    success: false,
+                    error: "Status must be active or inactive."
+                });
+            }
+
+            updates.status = status;
+        }
+
+        if (!Object.keys(updates).length) {
+            return res.status(400).json({
+                success: false,
+                error: "No valid affiliate link fields were provided."
+            });
+        }
+
+        updates.updated_at = new Date().toISOString();
+
+        const { data, error } = await supabase
+            .from("affiliate_links")
+            .update(updates)
+            .eq("id", id)
+            .select(
+                "id, product_id, network, merchant, affiliate_url, tracking_code, status, clicks, conversions, revenue, created_at, updated_at"
+            )
+            .maybeSingle();
+
+        if (error) throw error;
+
+        if (!data) {
+            return res.status(404).json({
+                success: false,
+                error: "Affiliate link not found."
+            });
+        }
+
+        return res.json({
+            success: true,
+            link: data
+        });
+    } catch (error) {
+        console.error("Affiliate link update error:", error);
+        return res.status(500).json({
+            success: false,
+            error: error.message || "Unable to update affiliate link."
+        });
+    }
+});
+
+// Admin: deactivate an affiliate link without deleting its click/revenue history.
+router.delete("/links/:id", requireAdmin, async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        const { data, error } = await supabase
+            .from("affiliate_links")
+            .update({
+                status: "inactive",
+                updated_at: new Date().toISOString()
+            })
+            .eq("id", id)
+            .select("id, status, updated_at")
+            .maybeSingle();
+
+        if (error) throw error;
+
+        if (!data) {
+            return res.status(404).json({
+                success: false,
+                error: "Affiliate link not found."
+            });
+        }
+
+        return res.json({
+            success: true,
+            link: data,
+            message: "Affiliate link deactivated."
+        });
+    } catch (error) {
+        console.error("Affiliate link deactivate error:", error);
+        return res.status(500).json({
+            success: false,
+            error: error.message || "Unable to deactivate affiliate link."
         });
     }
 });
