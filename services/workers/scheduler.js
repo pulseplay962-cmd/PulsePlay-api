@@ -3,6 +3,7 @@ import { processSocialQueueItem } from "./facebookPoster.js";
 import { supabase } from "../../lib/supabase.js";
 import { generateAndSaveWeeklyContent } from "../ai/contentService.js";
 import { cleanupAIQueue } from "../ai/queueCleanupService.js";
+import { autoPublishDueAIContent } from "../ai/autoPublishService.js";
 
 
 // =====================================
@@ -154,6 +155,35 @@ async function processWeeklyAIContent() {
 
 
 // =====================================
+// Automatic AI Approval + Publishing
+// =====================================
+
+async function processAutomaticAIPublishing() {
+
+  try {
+
+    const published =
+      await autoPublishDueAIContent();
+
+    console.log(
+      "AI auto-publish processed:",
+      published.length,
+      "articles"
+    );
+
+  } catch (err) {
+
+    console.error(
+      "AI auto-publish error:",
+      err
+    );
+
+  }
+
+}
+
+
+// =====================================
 // Scheduler
 // =====================================
 
@@ -195,6 +225,13 @@ export async function runOnce() {
   // =====================================
 
   await processWeeklyAIContent();
+
+
+  // =====================================
+  // AI Automatic Publishing
+  // =====================================
+
+  await processAutomaticAIPublishing();
 
 
   // =====================================
