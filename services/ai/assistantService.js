@@ -32,7 +32,7 @@ function clean(value, max = 1200) {
 async function loadContext(question) {
     const q = clean(question, 500);
 
-    const [gamesResult, newsResult, merchResult, productsResult] = await Promise.all([
+    const [gamesResult, newsResult, merchResult, productsResult, affiliateResult] = await Promise.all([
         supabase
             .from("games")
             .select("id, title, slug, genre, category, description")
@@ -52,10 +52,15 @@ async function loadContext(question) {
         supabase
             .from("products")
             .select("id, name, description, price, category")
-            .limit(40)
+            .limit(40),
+        supabase
+            .from("affiliate_links")
+            .select("id, product_id, merchant, status")
+            .eq("status", "active")
+            .limit(100)
     ]);
 
-    const errors = [gamesResult, newsResult, merchResult, productsResult]
+    const errors = [gamesResult, newsResult, merchResult, productsResult, affiliateResult]
         .map((result) => result.error)
         .filter(Boolean);
 
@@ -77,7 +82,7 @@ async function loadContext(question) {
         games: relevant(gamesResult.data || [], ["title", "genre", "category", "description"]),
         news: relevant(newsResult.data || [], ["title", "category", "excerpt"]),
         merchandise: relevant(merchResult.data || [], ["name", "collection", "category"]),
-        gear: relevant(productsResult.data || [], ["name", "description", "category"]),
+        gear,
         general: {
             streams: "PulsePlay's featured Twitch channel is Veiltactician.",
             community: "PulsePlay has a community area for gamers.",
