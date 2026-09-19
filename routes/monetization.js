@@ -489,6 +489,51 @@ router.get("/stats", requireAdmin, async (req, res) => {
             })
             .slice(0, 20);
 
+        // Build a daily 30-day traffic and affiliate-click trend.
+        // This is directional activity data; affiliate revenue is not date-attributed here.
+        const dailyPerformanceMap = new Map();
+
+        for (const event of pageViews || []) {
+            if (!event.created_at) continue;
+            const day = event.created_at.slice(0, 10);
+            const existing = dailyPerformanceMap.get(day);
+
+            if (existing) {
+                existing.views += 1;
+            } else {
+                dailyPerformanceMap.set(day, {
+                    date: day,
+                    views: 1,
+                    clicks: 0
+                });
+            }
+        }
+
+        for (const click of recentClicks || []) {
+            if (!click.created_at) continue;
+            const day = click.created_at.slice(0, 10);
+            const existing = dailyPerformanceMap.get(day);
+
+            if (existing) {
+                existing.clicks += 1;
+            } else {
+                dailyPerformanceMap.set(day, {
+                    date: day,
+                    views: 0,
+                    clicks: 1
+                });
+            }
+        }
+
+        const dailyPerformance = Array.from(dailyPerformanceMap.values())
+            .map((item) => ({
+                ...item,
+                click_rate: item.views
+                    ? (item.clicks / item.views) * 100
+                    : 0
+            }))
+            .sort((a, b) => a.date.localeCompare(b.date));
+
         // Show which affiliate products are receiving clicks from each page.
         // Revenue remains link-level because affiliate networks do not currently
         // send a conversion event tied to the individual page click.
@@ -566,6 +611,7 @@ router.get("/stats", requireAdmin, async (req, res) => {
             links: links || [],
             recentClicks: recentClicks || [],
             pagePerformance,
+            dailyPerformance,
             pageProductPerformance
         });
     } catch (error) {
