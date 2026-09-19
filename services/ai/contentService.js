@@ -267,7 +267,18 @@ function cleanAIText(text = "") {
         [ /\byourpreferred\b/gi, "your preferred" ],
         [ /\bfullattention\b/gi, "full attention" ],
         [ /\bhighdetail\b/gi, "high detail" ],
-        [ /\bEveryconnection\b/g, "Every connection" ]
+        [ /\bEveryconnection\b/g, "Every connection" ],
+        [ /\bhighestspecification\b/gi, "highest specification" ],
+        [ /\barepeatable\b/gi, "a repeatable" ],
+        [ /\bconfiguredincorrectly\b/gi, "configured incorrectly" ],
+        [ /\bBeforecommitting\b/g, "Before committing" ],
+        [ /\bsecondaryoption\b/gi, "secondary option" ],
+        [ /\beditionsinvolved\b/gi, "editions involved" ],
+        [ /\bsign-insand\b/gi, "sign-ins and" ],
+        [ /\blabelalone\b/gi, "label alone" ],
+        [ /\bnotpromises\b/gi, "not promises" ],
+        [ /\bhandheldgaming\b/gi, "handheld gaming" ],
+        [ /\bthanspeculative\b/gi, "than speculative" ]
     ];
 
     for (const [pattern, replacement] of mergedWordFixes) {
@@ -284,6 +295,12 @@ function cleanAIText(text = "") {
     result = result.replace(
         /,([A-Za-z])/g,
         ", $1"
+    );
+
+    // Repair missing spaces after sentence-ending punctuation.
+    result = result.replace(
+        /([.!?])([A-Z])/g,
+        "$1 $2"
     );
 
     // Ensure Markdown headings have spacing before them.
