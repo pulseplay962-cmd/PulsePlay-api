@@ -409,11 +409,79 @@ router.get("/stats", requireAdmin, async (req, res) => {
             .from("affiliate_clicks")
             .select("id, affiliate_link_id, product_id, page_path, campaign, created_at")
             .order("created_at", { ascending: false })
-            .limit(100);
+            .limit(5000);
 
         if (clicksError) {
             throw clicksError;
         }
+
+        // Build a 30-day traffic-to-affiliate view so the admin dashboard
+        // can show which pages are turning traffic into affiliate clicks.
+        const thirtyDaysAgo = new Date(
+            Date.now() - 30 * 24 * 60 * 60 * 1000
+        ).toISOString();
+
+        const { data: pageViews, error: pageViewsError } = await supabase
+            .from("analytics_events")
+            .select("page_path")
+            .eq("event_type", "page_view")
+            .gte("created_at", thirtyDaysAgo)
+            .limit(10000);
+
+        if (pageViewsError) {
+            throw pageViewsError;
+        }
+
+        const pagePerformanceMap = new Map();
+
+        for (const event of pageViews || []) {
+            const path = event.page_path || "/";
+            const existing = pagePerformanceMap.get(path);
+
+            if (existing) {
+                existing.views += 1;
+            } else {
+                pagePerformanceMap.set(path, {
+                    page_path: path,
+                    views: 1,
+                    clicks: 0
+                });
+            }
+        }
+
+        for (const click of recentClicks || []) {
+            if (!click.page_path) continue;
+
+            const path = click.page_path;
+            const existing = pagePerformanceMap.get(path);
+
+            if (existing) {
+                existing.clicks += 1;
+            } else {
+                pagePerformanceMap.set(path, {
+                    page_path: path,
+                    views: 0,
+                    clicks: 1
+                });
+            }
+        }
+
+        const pagePerformance = Array.from(pagePerformanceMap.values())
+            .map((item) => ({
+                ...item,
+                click_rate: item.views
+                    ? (item.clicks / item.views) * 100
+                    : 0
+            }))
+            .filter((item) => item.views > 0 || item.clicks > 0)
+            .sort((a, b) => {
+                if (b.clicks !== a.clicks) {
+                    return b.clicks - a.clicks;
+                }
+
+                return b.views - a.views;
+            })
+            .slice(0, 20);
 
         const totalClicks = (links || []).reduce(
             (sum, item) => sum + Number(item.clicks || 0),
@@ -439,7 +507,8 @@ router.get("/stats", requireAdmin, async (req, res) => {
                 totalRevenue
             },
             links: links || [],
-            recentClicks: recentClicks || []
+            recentClicks: recentClicks || [],
+            pagePerformance
         });
     } catch (error) {
         console.error("Monetization stats error:", error);
