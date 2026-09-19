@@ -278,7 +278,12 @@ function cleanAIText(text = "") {
         [ /\blabelalone\b/gi, "label alone" ],
         [ /\bnotpromises\b/gi, "not promises" ],
         [ /\bhandheldgaming\b/gi, "handheld gaming" ],
-        [ /\bthanspeculative\b/gi, "than speculative" ]
+        [ /\bthanspeculative\b/gi, "than speculative" ],
+        [ /\bsomethingthat\b/gi, "something that" ],
+        [ /\bselectinga\b/gi, "selecting a" ],
+        [ /\bambientlighting\b/gi, "ambient lighting" ],
+        [ /\bstrongforeground\b/gi, "strong foreground" ],
+        [ /\bshortnote\b/gi, "short note" ]
     ];
 
     for (const [pattern, replacement] of mergedWordFixes) {
@@ -301,6 +306,12 @@ function cleanAIText(text = "") {
     result = result.replace(
         /([.!?])([A-Z])/g,
         "$1 $2"
+    );
+
+    // Normalize Markdown heading spacing such as "##5." -> "## 5.".
+    result = result.replace(
+        /^(#{1,6})(?=\S)/gm,
+        "$1 "
     );
 
     // Ensure Markdown headings have spacing before them.
