@@ -60,7 +60,7 @@ const weeklySchedule = {
 // OpenAI Model
 // =====================================
 
-const AI_MODEL = "gpt-4.1-mini";
+const AI_MODEL =\n    process.env.PULSEAI_MODEL ||\n    "gpt-6-astra";
 
 
 // =====================================
