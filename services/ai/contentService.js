@@ -254,7 +254,20 @@ function cleanAIText(text = "") {
         [ /\bgameplay\b/gi, "gameplay" ],
         [ /\bgameworld\b/gi, "game world" ],
         [ /\baccountsecurity\b/gi, "account security" ],
-        [ /\bsubscriptions\b/gi, "subscriptions" ]
+        [ /\bsubscriptions\b/gi, "subscriptions" ],
+        [ /\bNewCorner\b/gi, "New Corner" ],
+        [ /\bmeetingits\b/gi, "meeting its" ],
+        [ /\beveryconnection\b/gi, "every connection" ],
+        [ /\breasonablereturn\b/gi, "reasonable return" ],
+        [ /\byouwant\b/gi, "you want" ],
+        [ /\bandname\b/gi, "and name" ],
+        [ /\bNoreplacement\b/gi, "No replacement" ],
+        [ /\breadas\b/gi, "read as" ],
+        [ /\bwouldsell\b/gi, "would sell" ],
+        [ /\byourpreferred\b/gi, "your preferred" ],
+        [ /\bfullattention\b/gi, "full attention" ],
+        [ /\bhighdetail\b/gi, "high detail" ],
+        [ /\bEveryconnection\b/g, "Every connection" ]
     ];
 
     for (const [pattern, replacement] of mergedWordFixes) {
@@ -265,6 +278,12 @@ function cleanAIText(text = "") {
     result = result.replace(
         /([,:;.!?])([A-Za-z])/g,
         "$1 $2"
+    );
+
+    // Fix missing spaces after commas in ordinary prose.
+    result = result.replace(
+        /,([A-Za-z])/g,
+        ", $1"
     );
 
     // Ensure Markdown headings have spacing before them.
