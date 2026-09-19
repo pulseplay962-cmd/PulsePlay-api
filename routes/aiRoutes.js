@@ -969,7 +969,8 @@ router.post(
             return res.json({
                 success: true,
                 answer: result.answer,
-                mode: result.mode
+                mode: result.mode,
+                recommendations: result.recommendations || []
             });
         } catch (error) {
             console.error("PulsePlay AI assistant error:", error);
