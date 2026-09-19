@@ -920,4 +920,67 @@ Draft Content Preview
 );
 
 
+
+// =====================================
+// PULSEPLAY AI VISITOR ASSISTANT
+// =====================================
+
+import { answerPulsePlayQuestion } from "../services/ai/assistantService.js";
+
+const assistantRateLimit = new Map();
+
+router.post(
+    "/assistant",
+    async (req, res) => {
+        try {
+            const question = String(req.body?.question || "").trim();
+
+            if (!question) {
+                return res.status(400).json({
+                    success: false,
+                    error: "A question is required."
+                });
+            }
+
+            if (question.length > 800) {
+                return res.status(400).json({
+                    success: false,
+                    error: "Please keep your question under 800 characters."
+                });
+            }
+
+            const key = req.ip || req.headers["x-forwarded-for"] || "unknown";
+            const now = Date.now();
+            const recent = assistantRateLimit.get(key) || [];
+            const active = recent.filter((timestamp) => now - timestamp < 60_000);
+
+            if (active.length >= 12) {
+                return res.status(429).json({
+                    success: false,
+                    error: "PulsePlay AI is getting a lot of traffic. Please try again in a moment."
+                });
+            }
+
+            active.push(now);
+            assistantRateLimit.set(key, active);
+
+            const result = await answerPulsePlayQuestion(question);
+
+            return res.json({
+                success: true,
+                answer: result.answer,
+                mode: result.mode
+            });
+        } catch (error) {
+            console.error("PulsePlay AI assistant error:", error);
+
+            return res.status(500).json({
+                success: false,
+                error: "PulsePlay AI is temporarily unavailable. Please try again shortly."
+            });
+        }
+    }
+);
+
+
 export default router;
