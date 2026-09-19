@@ -408,6 +408,12 @@ router.get("/stats", requireAdmin, async (req, res) => {
         const { data: recentClicks, error: clicksError } = await supabase
             .from("affiliate_clicks")
             .select("id, affiliate_link_id, product_id, page_path, campaign, created_at")
+            .gte(
+                "created_at",
+                new Date(
+                    Date.now() - 30 * 24 * 60 * 60 * 1000
+                ).toISOString()
+            )
             .order("created_at", { ascending: false })
             .limit(5000);
 
