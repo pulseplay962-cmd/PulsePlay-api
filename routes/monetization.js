@@ -429,7 +429,7 @@ router.get("/stats", requireAdmin, async (req, res) => {
 
         const { data: pageViews, error: pageViewsError } = await supabase
             .from("analytics_events")
-            .select("page_path")
+            .select("page_path, created_at")
             .eq("event_type", "page_view")
             .gte("created_at", thirtyDaysAgo)
             .limit(10000);
