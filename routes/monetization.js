@@ -483,6 +483,57 @@ router.get("/stats", requireAdmin, async (req, res) => {
             })
             .slice(0, 20);
 
+        // Show which affiliate products are receiving clicks from each page.
+        // Revenue remains link-level because affiliate networks do not currently
+        // send a conversion event tied to the individual page click.
+        const pageProductMap = new Map();
+        const productIds = [];
+
+        for (const click of recentClicks || []) {
+            if (!click.page_path || !click.product_id) continue;
+
+            const key = `${click.page_path}::${click.product_id}`;
+            const existing = pageProductMap.get(key);
+
+            if (existing) {
+                existing.clicks += 1;
+            } else {
+                pageProductMap.set(key, {
+                    page_path: click.page_path,
+                    product_id: click.product_id,
+                    clicks: 1
+                });
+                productIds.push(click.product_id);
+            }
+        }
+
+        const productDetails = await getProductDetails(productIds);
+
+        const pageProductPerformance = Array.from(pageProductMap.values())
+            .map((item) => {
+                const page = pagePerformanceMap.get(item.page_path);
+                const product = productDetails[item.product_id];
+
+                return {
+                    page_path: item.page_path,
+                    product_id: item.product_id,
+                    product_name: product?.name || "Unknown affiliate product",
+                    views: page?.views || 0,
+                    clicks: item.clicks,
+                    click_rate: page?.views
+                        ? (item.clicks / page.views) * 100
+                        : 0
+                };
+            })
+            .sort((a, b) => {
+                if (b.clicks !== a.clicks) {
+                    return b.clicks - a.clicks;
+                }
+
+                return b.views - a.views;
+            })
+            .slice(0, 50);
+
         const totalClicks = (links || []).reduce(
             (sum, item) => sum + Number(item.clicks || 0),
             0
@@ -508,7 +559,8 @@ router.get("/stats", requireAdmin, async (req, res) => {
             },
             links: links || [],
             recentClicks: recentClicks || [],
-            pagePerformance
+            pagePerformance,
+            pageProductPerformance
         });
     } catch (error) {
         console.error("Monetization stats error:", error);
