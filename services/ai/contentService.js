@@ -283,7 +283,19 @@ function cleanAIText(text = "") {
         [ /\bselectinga\b/gi, "selecting a" ],
         [ /\bambientlighting\b/gi, "ambient lighting" ],
         [ /\bstrongforeground\b/gi, "strong foreground" ],
-        [ /\bshortnote\b/gi, "short note" ]
+        [ /\bshortnote\b/gi, "short note" ],
+        [ /\bgraphicssettings\b/gi, "graphics settings" ],
+        [ /\bgameyou\b/gi, "game you" ],
+        [ /\bverifythe\b/gi, "verify the" ],
+        [ /\bpasswordsand\b/gi, "passwords and" ],
+        [ /\bthedevice\b/gi, "the device" ],
+        [ /\bmodeworks\b/gi, "mode works" ],
+        [ /\btoyou\b/gi, "to you" ],
+        [ /\bEvaluatethe\b/g, "Evaluate the" ],
+        [ /\brecordyour\b/gi, "record your" ],
+        [ /\bsettings,cloud\b/gi, "settings, cloud" ],
+        [ /\bsmootherperformance\b/gi, "smoother performance" ],
+        [ /\bpremiumgaming\b/gi, "premium gaming" ]
     ];
 
     for (const [pattern, replacement] of mergedWordFixes) {
