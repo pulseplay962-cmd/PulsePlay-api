@@ -3,6 +3,7 @@ dotenv.config();
 
 import express from "express";
 import { createClient } from "@supabase/supabase-js";
+import { createSocialPost } from "../services/socialQueue.js";
 
 console.log("🔥 NEWS ROUTES FILE LOADED");
 
@@ -10,18 +11,13 @@ const router = express.Router();
 
 router.get(
     "/test",
-    (req,res)=>{
-
+    (req, res) => {
         console.log("🔥 NEWS TEST ROUTE HIT");
 
         res.json({
-
-            success:true,
-
-            message:"News route is working"
-
+            success: true,
+            message: "News route is working"
         });
-
     }
 );
 
@@ -30,17 +26,10 @@ console.log(
     process.env.SUPABASE_URL
 );
 
-
 const supabase = createClient(
-
     process.env.SUPABASE_URL,
-
     process.env.SUPABASE_SERVICE_ROLE_KEY
-
 );
-
-
-
 
 // ==================================
 // Publish Article From PulseAI
@@ -48,160 +37,102 @@ const supabase = createClient(
 
 router.post(
     "/publish",
-    async (req,res)=>{
-
-
-        try{
-
-
+    async (req, res) => {
+        try {
             const {
-
                 title,
-
                 slug,
-
                 excerpt,
-
                 content,
-
                 image,
-
                 category,
-
                 author
-
             } = req.body;
 
-
-
-
-            if(!title || !content){
-
-
+            if (!title || !content) {
                 return res.status(400).json({
-
-                    success:false,
-
-                    error:
-                    "Title and content are required."
-
+                    success: false,
+                    error: "Title and content are required."
                 });
-
-
             }
 
-
-
-
-
-
-            const { data,error } =
-
-            await supabase
-
+            const { data, error } = await supabase
                 .from("news")
-
                 .insert([
-
                     {
-
                         title,
-
                         slug,
-
                         excerpt,
-
                         content,
-
-                        image:
-                        image || "",
-
-                        category:
-                        category || "Gaming",
-
-                        author:
-                        author || "PulseAI",
-
-                        published:true,
-
-                        status:"published"
-
+                        image: image || "",
+                        category: category || "Gaming",
+                        author: author || "PulseAI",
+                        published: true,
+                        status: "published"
                     }
-
                 ])
-
                 .select()
-
                 .single();
 
-
-
-
-
-
-
-            if(error){
-
-
+            if (error) {
                 console.error(
                     "Publish insert error:",
                     error
                 );
 
-
                 return res.status(500).json({
-
-                    success:false,
-
-                    error:error.message
-
+                    success: false,
+                    error: error.message
                 });
-
-
             }
 
+            /*
+             * Create the same Facebook queue record used by
+             * AI publishing. When the direct Meta integration
+             * is configured, createSocialPost publishes it
+             * automatically and leaves the article publishing
+             * path independent from Facebook failures.
+             */
+            try {
+                const socialText = [
+                    title,
+                    excerpt || "",
+                    `Read more: https://pulseplay.online/news/${data.slug}`
+                ]
+                    .filter(Boolean)
+                    .join("\n\n");
 
-
-
-
-
+                await createSocialPost({
+                    newsId: data.id,
+                    platform: "facebook",
+                    postText: socialText,
+                    imageUrl: image || "",
+                    hashtags: [],
+                    scheduledAt: null
+                });
+            } catch (socialError) {
+                console.error(
+                    "Facebook social post creation failed:",
+                    socialError
+                );
+            }
 
             return res.json({
-
-                success:true,
-
-                article:data
-
+                success: true,
+                article: data
             });
-
-
-
-        }
-        catch(error){
-
-
+        } catch (error) {
             console.error(
                 "Publish route error:",
                 error
             );
 
-
-
             return res.status(500).json({
-
-                success:false,
-
-                error:
-                "Unable to publish article."
-
+                success: false,
+                error: "Unable to publish article."
             });
-
-
         }
-
-
     }
-
 );
 
 console.log(
