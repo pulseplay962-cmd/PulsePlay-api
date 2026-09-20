@@ -4,6 +4,7 @@ dotenv.config();
 import express from "express";
 import { createClient } from "@supabase/supabase-js";
 import { createSocialPost } from "../services/socialQueue.js";
+import { publishToFacebook } from "../services/facebookService.js";
 
 console.log("🔥 NEWS ROUTES FILE LOADED");
 
@@ -18,6 +19,39 @@ router.get(
             success: true,
             message: "News route is working"
         });
+    }
+);
+
+// TEMPORARY CONTROLLED FACEBOOK TEST
+router.get(
+    "/facebook-test",
+    async (req, res) => {
+        try {
+            const result = await publishToFacebook({
+                message:
+                    "⚡ PulsePlay Facebook Auto-Posting Test\n\n" +
+                    "The Gaming Command Center is now connected. " +
+                    "Automatic PulsePlay article posting to Facebook is being tested.\n\n" +
+                    "PulsePlay.online — Gaming • Streaming • Community",
+                link: "https://pulseplay.online/"
+            });
+
+            return res.json({
+                success: true,
+                message: "Facebook test post published.",
+                postId: result.postId || null
+            });
+        } catch (error) {
+            console.error(
+                "Facebook test publish error:",
+                error
+            );
+
+            return res.status(500).json({
+                success: false,
+                error: error.message
+            });
+        }
     }
 );
 
@@ -86,13 +120,6 @@ router.post(
                 });
             }
 
-            /*
-             * Create the same Facebook queue record used by
-             * AI publishing. When the direct Meta integration
-             * is configured, createSocialPost publishes it
-             * automatically and leaves the article publishing
-             * path independent from Facebook failures.
-             */
             try {
                 const socialText = [
                     title,
