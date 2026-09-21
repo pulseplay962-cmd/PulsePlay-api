@@ -226,13 +226,27 @@ async function transcribeAudio(audioFile) {
     }
   }
 
-  const segments = Array.isArray(normalized?.segments) ? normalized.segments : [];
+  let segments = Array.isArray(normalized?.segments) ? normalized.segments : [];
+  const text = typeof normalized?.text === "string" ? normalized.text.trim() : "";
+
   console.log("AI transcription response:", {
     type: typeof response,
     keys: normalized && typeof normalized === "object" ? Object.keys(normalized) : [],
-    textLength: typeof normalized?.text === "string" ? normalized.text.length : 0,
+    textLength: text.length,
     segmentCount: segments.length
   });
+
+  // Some OpenAI SDK/API response combinations return the transcript text
+  // without the verbose segment array. Keep the workflow usable by treating
+  // that transcript as one timestamped analysis window.
+  if (!segments.length && text) {
+    segments = [{
+      start: 0,
+      end: Math.min(900, Number(process.env.AI_CLIP_ANALYSIS_SECONDS) || 900),
+      text
+    }];
+    console.log("AI transcription fallback: using full transcript text as one analysis segment.");
+  }
 
   return segments;
 }
