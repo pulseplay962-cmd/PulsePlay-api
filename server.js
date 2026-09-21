@@ -43,7 +43,7 @@ app.use(cors(corsOptions));
 app.use("/api/stripe", stripeWebhookRoutes);
 console.log("Stripe webhook mounted at /api/stripe/webhook");
 
-app.use(express.json());
+app.use(express.urlencoded({ extended: false }));\napp.use(express.json());
 
 app.get("/", (req, res) => {
     res.json({ success: true, message: "PulsePlay API is running 🚀" });
