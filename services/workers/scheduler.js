@@ -4,6 +4,7 @@ import { supabase } from "../../lib/supabase.js";
 import { generateAndSaveWeeklyContent } from "../ai/contentService.js";
 import { cleanupAIQueue } from "../ai/queueCleanupService.js";
 import { autoPublishDueAIContent } from "../ai/autoPublishService.js";
+import { syncRecentStreamVods } from "../ai/streamClipService.js";
 
 
 // =====================================
@@ -233,6 +234,17 @@ export async function runOnce() {
 
   await processAutomaticAIPublishing();
 
+
+  // =====================================
+  // Twitch VOD discovery for AI Clip Command Center
+  // =====================================
+
+  try {
+    await syncRecentStreamVods(twitchChannel, 10);
+    console.log("AI stream VOD library synced.");
+  } catch (err) {
+    console.error("AI stream VOD sync error:", err);
+  }
 
   // =====================================
   // Twitch
