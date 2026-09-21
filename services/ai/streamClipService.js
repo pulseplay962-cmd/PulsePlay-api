@@ -273,9 +273,12 @@ export async function analyzeVodForClipCandidates(vodId) {
     await supabase.from("ai_stream_vods").update({ status: "analyzing" }).eq("id", vodId);
     const audioFile = await downloadAudioPreview(vod.url, audioStem, duration);
     const segments = await transcribeAudio(audioFile);
+    console.log(`AI VOD transcription complete: ${segments.length} segments for ${vod.twitch_id}`);
     const moments = await detectMomentsFromTranscript({ vod, segments });
+    console.log(`AI VOD moment detection complete: ${moments.length} moments for ${vod.twitch_id}`);
 
     const created = [];
+    const candidateErrors = [];
     for (const moment of moments) {
       try {
         created.push(await createClipCandidate({
@@ -287,12 +290,17 @@ export async function analyzeVodForClipCandidates(vodId) {
           score: moment.score
         }));
       } catch (err) {
-        console.warn("Skipping AI clip candidate:", err.message);
+        console.error("AI clip candidate creation failed:", err);
+        candidateErrors.push(err.message || "Unknown candidate creation error.");
       }
     }
 
+    if (moments.length > 0 && created.length === 0) {
+      throw new Error(`AI found ${moments.length} moments, but none could be saved as clip candidates. ${candidateErrors[0] || ""}`.trim());
+    }
+
     await supabase.from("ai_stream_vods").update({ status: "analyzed", analyzed_at: new Date().toISOString() }).eq("id", vodId);
-    return { vod, candidates: created, analyzedSegments: segments.length };
+    return { vod, candidates: created, analyzedSegments: segments.length, detectedMoments: moments.length, candidateErrors };
   } catch (err) {
     await supabase.from("ai_stream_vods").update({ status: "analysis_failed" }).eq("id", vodId);
     throw err;
