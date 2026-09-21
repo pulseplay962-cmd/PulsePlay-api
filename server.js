@@ -17,16 +17,28 @@ import streamClipsRoutes from "./routes/streamClips.js";
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+const allowedOrigins = new Set([
+    "http://localhost:5173",
+    "http://localhost:5174",
+    "https://pulseplay-v2-f0wz.onrender.com",
+    "https://pulseplay.online",
+    "https://www.pulseplay.online"
+]);
+
 const corsOptions = {
-    origin: true,
-    credentials: true,
+    origin(origin, callback) {
+        if (!origin || allowedOrigins.has(origin)) {
+            return callback(null, true);
+        }
+        return callback(new Error("CORS origin not allowed"));
+    },
+    credentials: false,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
     optionsSuccessStatus: 204
 };
 
 app.use(cors(corsOptions));
-app.options(/.*/, cors(corsOptions));
 
 app.use("/api/stripe", stripeWebhookRoutes);
 console.log("Stripe webhook mounted at /api/stripe/webhook");
