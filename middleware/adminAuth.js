@@ -3,7 +3,11 @@ import { supabase } from "../lib/supabase.js";
 export async function requireAdmin(req, res, next) {
   try {
     const authorization = req.headers.authorization || "";
-    const bodyToken = typeof req.body?.access_token === "string" ? req.body.access_token.trim() : "";
+    const bodyToken = typeof req.body === "string"
+      ? req.body.trim()
+      : typeof req.body?.access_token === "string"
+        ? req.body.access_token.trim()
+        : "";
 
     if (!authorization.startsWith("Bearer ") && !bodyToken) {
       return res.status(401).json({
