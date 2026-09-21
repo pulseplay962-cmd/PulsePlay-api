@@ -252,7 +252,7 @@ async function transcribeAudio(audioFile) {
 }
 
 async function detectMomentsFromTranscript({ vod, segments }) {
-  if (!isAIProductionMode() || !segments.length) return [];
+  if ((!isAIProductionMode() && !process.env.OPENAI_API_KEY) || !segments.length) return [];
   const transcript = segments
     .map(s => `[${clock(s.start)}-${clock(s.end)}] ${s.text || ""}`)
     .join("\n")
