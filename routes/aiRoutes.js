@@ -984,4 +984,22 @@ router.post(
 );
 
 
+
+router.post(
+    "/growth/run",
+    requireAdmin,
+    async (req, res) => {
+        try {
+            const result = await runGrowthManager();
+            return res.json(result);
+        } catch (error) {
+            console.error("AI Growth Manager error:", error);
+            return res.status(500).json({
+                success: false,
+                error: error.message || "Unable to run the AI Growth Manager."
+            });
+        }
+    }
+);
+
 export default router;
