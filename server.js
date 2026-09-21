@@ -44,6 +44,7 @@ app.use("/api/stripe", stripeWebhookRoutes);
 console.log("Stripe webhook mounted at /api/stripe/webhook");
 
 app.use(express.urlencoded({ extended: false }));
+app.use(express.text({ type: "text/plain" }));
 app.use(express.json());
 
 app.get("/", (req, res) => {
