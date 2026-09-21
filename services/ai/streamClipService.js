@@ -2,13 +2,14 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import ytdlp from "youtube-dl-exec";
-import ffmpegPath from "ffmpeg-static";
+import ffmpegStaticPath from "ffmpeg-static";
 import openai, { getAIMode } from "./openaiService.js";
 import { supabase } from "../../lib/supabase.js";
 import { fetchRecentVideos } from "../twitch.js";
 
 const DEFAULT_CHANNEL = process.env.TWITCH_CHANNEL || "Veiltactician";
 const TITLE_MODEL = process.env.PULSEAI_MODEL || "gpt-4.1-mini";
+const ffmpegPath = process.env.FFMPEG_PATH || (process.platform === "linux" ? "/usr/bin/ffmpeg" : ffmpegStaticPath);
 
 function clock(seconds) {
   const total = Math.max(0, Math.floor(Number(seconds) || 0));
@@ -175,21 +176,31 @@ function parseDuration(value) {
   return Number.isFinite(numeric) ? numeric : 0;
 }
 
-async function downloadAudioPreview(sourceUrl, outputFile, durationSeconds) {
+async function downloadAudioPreview(sourceUrl, outputStem, durationSeconds) {
   if (!ffmpegPath) throw new Error("FFmpeg is not available in this deployment.");
+
+  // Render's native Debian runtime includes system FFmpeg. Use it instead of
+  // ffmpeg-static, whose bundled binary is crashing with SIGSEGV (-11) on the
+  // free instance during Twitch VOD audio extraction.
+  const analysisLimit = Math.min(Number(durationSeconds) || 0, 900);
+  const outputTemplate = outputStem + ".%(ext)s";
+
   await ytdlp(sourceUrl, {
-    output: outputFile,
+    output: outputTemplate,
     format: "worstaudio/worst",
-    extractAudio: true,
-    audioFormat: "mp3",
-    audioQuality: "8",
     playlistItems: "1",
     noPlaylist: true,
     quiet: true,
     noWarnings: true,
     ffmpegLocation: ffmpegPath,
-    downloadSections: durationSeconds > 900 ? "*0-900" : "*0-"+durationSeconds
+    downloadSections: "*0-" + analysisLimit
   });
+
+  const files = await fs.readdir(path.dirname(outputStem));
+  const prefix = path.basename(outputStem) + ".";
+  const match = files.find(name => name.startsWith(prefix) && name !== path.basename(outputStem));
+  if (!match) throw new Error("Audio download completed but no audio file was found.");
+  return path.join(path.dirname(outputStem), match);
 }
 
 async function transcribeAudio(audioFile) {
@@ -257,10 +268,10 @@ export async function analyzeVodForClipCandidates(vodId) {
   if (!duration) throw new Error("VOD duration is unavailable.");
 
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "pulseplay-analysis-"));
-  const audioFile = path.join(tempDir, `${vod.twitch_id}.mp3`);
+  const audioStem = path.join(tempDir, `${vod.twitch_id}`);
   try {
     await supabase.from("ai_stream_vods").update({ status: "analyzing" }).eq("id", vodId);
-    await downloadAudioPreview(vod.url, audioFile, duration);
+    const audioFile = await downloadAudioPreview(vod.url, audioStem, duration);
     const segments = await transcribeAudio(audioFile);
     const moments = await detectMomentsFromTranscript({ vod, segments });
 
