@@ -27,11 +27,28 @@ router.post("/vods/:id/analyze", requireAdmin, async (req,res)=>{
 
 router.post("/vods/:id/auto-render", requireAdmin, async (req,res)=>{
   try {
-    const result = await autoRenderTopClips(req.params.id, req.body?.limit || 3);
-    res.json({success:true,...result});
+    const limit = Math.min(Number(req.body?.limit) || 3, 3);
+    res.status(202).json({
+      success: true,
+      started: true,
+      message: `Auto-render started for up to ${limit} AI-ranked clips. Rendering continues in the background.`,
+      limit
+    });
+
+    void autoRenderTopClips(req.params.id, limit).then((result) => {
+      console.log("AI auto-render background complete:", {
+        vodId: req.params.id,
+        rendered: result.rendered?.length || 0,
+        errors: result.errors?.length || 0
+      });
+    }).catch((error) => {
+      console.error("AI auto-render background error:", error);
+    });
   } catch(error) {
-    console.error("AI auto-render error:",error);
-    res.status(500).json({success:false,error:error.message||"Unable to auto-render clips."});
+    console.error("AI auto-render start error:",error);
+    if (!res.headersSent) {
+      res.status(500).json({success:false,error:error.message||"Unable to start auto-render."});
+    }
   }
 });
 
