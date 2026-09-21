@@ -1,6 +1,6 @@
 import express from "express";
 import { requireAdmin } from "../middleware/adminAuth.js";
-import { syncRecentStreamVods, listStreamVods, createClipCandidate, renderClip, listClips } from "../services/ai/streamClipService.js";
+import { syncRecentStreamVods, listStreamVods, createClipCandidate, renderClip, listClips, analyzeVodForClipCandidates } from "../services/ai/streamClipService.js";
 
 const router = express.Router();
 
@@ -12,6 +12,16 @@ router.get("/vods", requireAdmin, async (req,res)=>{
   } catch(error) {
     console.error("AI stream VOD error:",error);
     res.status(500).json({success:false,error:error.message||"Unable to load stream VODs."});
+  }
+});
+
+router.post("/vods/:id/analyze", requireAdmin, async (req,res)=>{
+  try {
+    const result = await analyzeVodForClipCandidates(req.params.id);
+    res.json({success:true,...result});
+  } catch(error) {
+    console.error("AI VOD analysis error:",error);
+    res.status(500).json({success:false,error:error.message||"Unable to analyze VOD."});
   }
 });
 
