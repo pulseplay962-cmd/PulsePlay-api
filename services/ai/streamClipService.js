@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import ytdlp from "youtube-dl-exec";
 import ffmpegStaticPath from "ffmpeg-static";
-import openai, { getAIMode } from "./openaiService.js";
+import openai, { getAIMode, isAIProductionMode } from "./openaiService.js";
 import { supabase } from "../../lib/supabase.js";
 import { fetchRecentVideos } from "../twitch.js";
 
@@ -20,7 +20,7 @@ function clock(seconds) {
 }
 
 async function generateClipTitles({ streamTitle, momentType, startSeconds, endSeconds, context = "" }) {
-  if (getAIMode?.() !== "openai") {
+  if (!isAIProductionMode()) {
     return {
       title: `${streamTitle || "Veiltactician Stream"} — ${momentType || "Highlight"}`,
       options: [],
@@ -210,7 +210,7 @@ async function transcribeAudio(audioFile) {
   const file = await import("node:fs").then(m => m.createReadStream(audioFile));
   const response = await openai.audio.transcriptions.create({
     file,
-    model: process.env.PULSEAI_TRANSCRIPTION_MODEL || "gpt-4o-mini-transcribe",
+    model: process.env.PULSEAI_TRANSCRIPTION_MODEL || "whisper-1",
     response_format: "verbose_json",
     timestamp_granularities: ["segment"]
   });
@@ -218,7 +218,7 @@ async function transcribeAudio(audioFile) {
 }
 
 async function detectMomentsFromTranscript({ vod, segments }) {
-  if (getAIMode?.() !== "openai" || !segments.length) return [];
+  if (!isAIProductionMode() || !segments.length) return [];
   const transcript = segments
     .map(s => `[${clock(s.start)}-${clock(s.end)}] ${s.text || ""}`)
     .join("\n")
