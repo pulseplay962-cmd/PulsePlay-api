@@ -4,10 +4,6 @@ dotenv.config();
 import express from "express";
 import { createClient } from "@supabase/supabase-js";
 import { createSocialPost } from "../services/socialQueue.js";
-import {
-    publishToFacebook,
-    getFacebookPageAccessToken
-} from "../services/facebookService.js";
 
 console.log("🔥 NEWS ROUTES FILE LOADED");
 
@@ -22,93 +18,6 @@ router.get(
             success: true,
             message: "News route is working"
         });
-    }
-);
-
-// FACEBOOK TOKEN / PAGE ACCESS VERIFICATION
-router.get(
-    "/facebook-verify",
-    async (req, res) => {
-        try {
-            const pageId = process.env.FACEBOOK_PAGE_ID?.trim();
-            const systemUserToken = process.env.FACEBOOK_PAGE_ACCESS_TOKEN?.trim();
-
-            if (!pageId || !systemUserToken) {
-                return res.status(500).json({
-                    success: false,
-                    error: "Facebook Page configuration is missing."
-                });
-            }
-
-            const identityResponse = await fetch(
-                `https://graph.facebook.com/v26.0/me?fields=id,name&access_token=${encodeURIComponent(systemUserToken)}`
-            );
-            const identity = await identityResponse.json();
-
-            if (!identityResponse.ok || identity.error) {
-                return res.status(500).json({
-                    success: false,
-                    error:
-                        identity?.error?.message ||
-                        "Facebook system-user token verification failed."
-                });
-            }
-
-            const pageResult = await getFacebookPageAccessToken();
-
-            return res.json({
-                success: true,
-                configuredPageId: pageId,
-                systemUser: {
-                    id: identity.id || null,
-                    name: identity.name || null
-                },
-                pageAccess: {
-                    resolved: Boolean(pageResult.success),
-                    pageId: pageResult.pageId || pageId
-                }
-            });
-        } catch (error) {
-            console.error("Facebook Page access verification error:", error);
-
-            return res.status(500).json({
-                success: false,
-                error: error.message
-            });
-        }
-    }
-);
-
-// CONTROLLED FACEBOOK TEST
-router.get(
-    "/facebook-test",
-    async (req, res) => {
-        try {
-            const result = await publishToFacebook({
-                message:
-                    "⚡ PulsePlay Facebook Auto-Posting Test\n\n" +
-                    "The Gaming Command Center is now connected. " +
-                    "Automatic PulsePlay article posting to Facebook is being tested.\n\n" +
-                    "PulsePlay.online — Gaming • Streaming • Community",
-                link: "https://pulseplay.online/"
-            });
-
-            return res.json({
-                success: true,
-                message: "Facebook test post published.",
-                postId: result.postId || null
-            });
-        } catch (error) {
-            console.error(
-                "Facebook test publish error:",
-                error
-            );
-
-            return res.status(500).json({
-                success: false,
-                error: error.message
-            });
-        }
     }
 );
 
