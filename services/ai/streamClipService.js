@@ -157,7 +157,7 @@ function parseDuration(value) {
 
   // Twitch VOD durations are commonly returned as strings such as:
   // "1h23m45s", "23m45s", or "45s".
-  const twitch = raw.match(/^(?:(\\d+)h)?(?:(\\d+)m)?(?:(\\d+)s)?$/i);
+  const twitch = raw.match(/^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$/i);
   if (twitch && twitch[0]) {
     const hours = Number(twitch[1] || 0);
     const minutes = Number(twitch[2] || 0);
@@ -166,7 +166,7 @@ function parseDuration(value) {
   }
 
   // Also accept HH:MM:SS / MM:SS formats for existing or manually stored VODs.
-  const colon = raw.match(/^(?:(\\d+):)?(\\d+):(\\d+)(?:\\.(\\d+))?$/);
+  const colon = raw.match(/^(?:(\d+):)?(\d+):(\d+)(?:\.(\d+))?$/);
   if (colon) {
     return (Number(colon[1] || 0) * 3600) + (Number(colon[2] || 0) * 60) + Number(colon[3] || 0);
   }
