@@ -2,16 +2,16 @@ import { supabase } from "../lib/supabase.js";
 
 export async function requireAdmin(req, res, next) {
   try {
-    const authorization = req.headers.authorization || "";
+    const authorization = req.headers.authorization || "";\n    const bodyToken = typeof req.body?.access_token === "string" ? req.body.access_token.trim() : "";
 
-    if (!authorization.startsWith("Bearer ")) {
+    if (!authorization.startsWith("Bearer ") && !bodyToken) {
       return res.status(401).json({
         success: false,
         error: "Authentication required.",
       });
     }
 
-    const token = authorization.substring(7).trim();
+    const token = authorization.startsWith("Bearer ")\n      ? authorization.substring(7).trim()\n      : bodyToken;
 
     if (!token) {
       return res.status(401).json({
