@@ -188,7 +188,7 @@ async function processAutomaticAIPublishing() {
 // Scheduler
 // =====================================
 
-export async function runOnce() {
+const twitchChannel = process.env.TWITCH_CHANNEL || "Veiltactician";\n\nexport async function runOnce() {
 
   console.log(
     "================================="
