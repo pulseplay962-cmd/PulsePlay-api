@@ -4,7 +4,10 @@ dotenv.config();
 import express from "express";
 import { createClient } from "@supabase/supabase-js";
 import { createSocialPost } from "../services/socialQueue.js";
-import { publishToFacebook } from "../services/facebookService.js";
+import {
+    publishToFacebook,
+    getFacebookPageAccessToken
+} from "../services/facebookService.js";
 
 console.log("🔥 NEWS ROUTES FILE LOADED");
 
@@ -22,44 +25,52 @@ router.get(
     }
 );
 
-// TEMPORARY FACEBOOK TOKEN VERIFICATION
+// FACEBOOK TOKEN / PAGE ACCESS VERIFICATION
 router.get(
     "/facebook-verify",
     async (req, res) => {
         try {
             const pageId = process.env.FACEBOOK_PAGE_ID?.trim();
-            const accessToken = process.env.FACEBOOK_PAGE_ACCESS_TOKEN?.trim();
+            const systemUserToken = process.env.FACEBOOK_PAGE_ACCESS_TOKEN?.trim();
 
-            if (!pageId || !accessToken) {
+            if (!pageId || !systemUserToken) {
                 return res.status(500).json({
                     success: false,
                     error: "Facebook Page configuration is missing."
                 });
             }
 
-            const response = await fetch(
-                `https://graph.facebook.com/v26.0/me?fields=id,name&access_token=${encodeURIComponent(accessToken)}`
+            const identityResponse = await fetch(
+                `https://graph.facebook.com/v26.0/me?fields=id,name&access_token=${encodeURIComponent(systemUserToken)}`
             );
-            const result = await response.json();
+            const identity = await identityResponse.json();
 
-            if (!response.ok || result.error) {
+            if (!identityResponse.ok || identity.error) {
                 return res.status(500).json({
                     success: false,
-                    error: result?.error?.message || "Facebook token verification failed."
+                    error:
+                        identity?.error?.message ||
+                        "Facebook system-user token verification failed."
                 });
             }
+
+            const pageResult = await getFacebookPageAccessToken();
 
             return res.json({
                 success: true,
                 configuredPageId: pageId,
-                tokenIdentity: {
-                    id: result.id || null,
-                    name: result.name || null
+                systemUser: {
+                    id: identity.id || null,
+                    name: identity.name || null
                 },
-                matchesConfiguredPage: String(result.id || "") === String(pageId)
+                pageAccess: {
+                    resolved: Boolean(pageResult.success),
+                    pageId: pageResult.pageId || pageId
+                }
             });
         } catch (error) {
-            console.error("Facebook token verification error:", error);
+            console.error("Facebook Page access verification error:", error);
+
             return res.status(500).json({
                 success: false,
                 error: error.message
@@ -68,7 +79,7 @@ router.get(
     }
 );
 
-// TEMPORARY CONTROLLED FACEBOOK TEST
+// CONTROLLED FACEBOOK TEST
 router.get(
     "/facebook-test",
     async (req, res) => {
