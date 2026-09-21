@@ -33,31 +33,11 @@ async function loadContext(question) {
     const q = clean(question, 500);
 
     const [gamesResult, newsResult, merchResult, productsResult, affiliateResult] = await Promise.all([
-        supabase
-            .from("games")
-            .select("id, title, slug, genre, category, description")
-            .order("title", { ascending: true })
-            .limit(40),
-        supabase
-            .from("news")
-            .select("id, title, slug, category, excerpt")
-            .eq("published", true)
-            .order("created_at", { ascending: false })
-            .limit(30),
-        supabase
-            .from("merchandise")
-            .select("id, name, collection, category, price, product_url, status")
-            .eq("status", "active")
-            .limit(30),
-        supabase
-            .from("products")
-            .select("id, name, description, price, category")
-            .limit(40),
-        supabase
-            .from("affiliate_links")
-            .select("id, product_id, merchant, status")
-            .eq("status", "active")
-            .limit(100)
+        supabase.from("games").select("id, title, slug, genre, category, description").order("title", { ascending: true }).limit(40),
+        supabase.from("news").select("id, title, slug, category, excerpt").eq("published", true).order("created_at", { ascending: false }).limit(30),
+        supabase.from("merchandise").select("id, name, collection, category, price, product_url, status").eq("status", "active").limit(30),
+        supabase.from("products").select("id, name, description, price, category").limit(40),
+        supabase.from("affiliate_links").select("id, product_id, merchant, status").eq("status", "active").limit(100)
     ]);
 
     const errors = [gamesResult, newsResult, merchResult, productsResult, affiliateResult]
@@ -69,20 +49,25 @@ async function loadContext(question) {
     }
 
     const keywordParts = q.toLowerCase().split(/[^a-z0-9]+/).filter((word) => word.length >= 3);
+
     const relevant = (items = [], fields = []) => {
         const scored = items.map((item) => {
             const haystack = fields.map((field) => clean(item[field], 800).toLowerCase()).join(" ");
             const score = keywordParts.reduce((total, word) => total + (haystack.includes(word) ? 1 : 0), 0);
             return { item, score };
         });
+
         return scored.sort((a, b) => b.score - a.score).slice(0, 12).map(({ item }) => item);
     };
+
+    const gear = relevant(productsResult.data || [], ["name", "description", "category"]);
 
     return {
         games: relevant(gamesResult.data || [], ["title", "genre", "category", "description"]),
         news: relevant(newsResult.data || [], ["title", "category", "excerpt"]),
         merchandise: relevant(merchResult.data || [], ["name", "collection", "category"]),
         gear,
+        affiliateLinks: affiliateResult.data || [],
         general: {
             streams: "PulsePlay's featured Twitch channel is Veiltactician.",
             community: "PulsePlay has a community area for gamers.",
@@ -104,17 +89,15 @@ export async function answerPulsePlayQuestion(question) {
     const response = await openai.responses.create({
         model: AI_MODEL,
         instructions: SYSTEM_PROMPT,
-        input: [
-            {
-                role: "user",
-                content: `Visitor question:
+        input: [{
+            role: "user",
+            content: `Visitor question:
 ${clean(question, 800)}
 
 PulsePlay data:
 ${JSON.stringify(context)}
 `
-            }
-        ],
+        }],
         max_output_tokens: 500
     });
 
@@ -124,8 +107,5 @@ ${JSON.stringify(context)}
         throw new Error("PulsePlay AI returned an empty response.");
     }
 
-    return {
-        answer,
-        mode: "openai"
-    };
+    return { answer, mode: "openai" };
 }
