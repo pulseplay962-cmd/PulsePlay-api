@@ -76,6 +76,82 @@ async function getContext(path) {
     return null;
 }
 
+
+async function getRelatedContent(context, limit = 3) {
+    const sourceWords = tokens(
+        `${context.title} ${context.category || ""} ${context.description || ""}`
+    );
+
+    const candidates = [];
+
+    if (context.type !== "news") {
+        const { data: news, error } = await supabase
+            .from("news")
+            .select("id, title, slug, category, excerpt")
+            .eq("published", true)
+            .limit(50);
+
+        if (error) throw error;
+
+        for (const item of news || []) {
+            candidates.push({
+                type: "news",
+                id: item.id,
+                title: item.title,
+                category: item.category,
+                excerpt: item.excerpt,
+                path: `/news/${item.slug}`
+            });
+        }
+    }
+
+    if (context.type !== "game") {
+        const { data: games, error } = await supabase
+            .from("games")
+            .select("id, title, slug, genre, category, description")
+            .limit(50);
+
+        if (error) throw error;
+
+        for (const item of games || []) {
+            candidates.push({
+                type: "game",
+                id: item.id,
+                title: item.title,
+                category: item.category || item.genre,
+                excerpt: item.description,
+                path: `/games/${item.slug || item.id}`
+            });
+        }
+    }
+
+    return candidates
+        .map((item) => {
+            const itemWords = tokens(
+                `${item.title} ${item.category || ""} ${item.excerpt || ""}`
+            );
+
+            let score = 0;
+            if (
+                context.category &&
+                item.category &&
+                normalize(context.category) === normalize(item.category)
+            ) {
+                score += 10;
+            }
+
+            for (const word of sourceWords) {
+                if (itemWords.has(word)) score += 2;
+            }
+
+            return { ...item, score };
+        })
+        .filter((item) => item.score > 0)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, limit)
+        .map(({ score, ...item }) => item);
+}
+
 router.get("/", async (req, res) => {
     try {
         const path = typeof req.query.path === "string" ? req.query.path.slice(0, 1000) : "";
@@ -126,6 +202,8 @@ router.get("/", async (req, res) => {
             .slice(0, limit)
             .map(({ score, ...recommendation }) => recommendation);
 
+        const relatedContent = await getRelatedContent(context, 3);
+
         return res.json({
             success: true,
             context: {
@@ -134,7 +212,8 @@ router.get("/", async (req, res) => {
                 title: context.title,
                 category: context.category || null
             },
-            recommendations
+            recommendations,
+            relatedContent
         });
     } catch (error) {
         console.error("Affiliate recommendations error:", error);
