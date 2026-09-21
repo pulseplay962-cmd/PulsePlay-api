@@ -12,6 +12,7 @@ import checkoutRoutes from "./routes/checkout.js";
 import stripeWebhookRoutes from "./routes/stripeWebhook.js";
 import monetizationRoutes from "./routes/monetization.js";
 import recommendationsRoutes from "./routes/recommendations.js";
+import streamClipsRoutes from "./routes/streamClips.js";
 
 const app = express();
 
@@ -134,6 +135,11 @@ console.log("Loading affiliate recommendation routes...");
 app.use(
     "/api/recommendations",
     recommendationsRoutes
+);
+
+app.use(
+    "/api/ai/stream-clips",
+    streamClipsRoutes
 );
 
 console.log(
