@@ -343,6 +343,32 @@ export async function analyzeVodForClipCandidates(vodId) {
   }
 }
 
+export async function autoRenderTopClips(vodId, limit = 3) {
+  const { data: clips, error } = await supabase
+    .from("ai_stream_clips")
+    .select("*")
+    .eq("vod_id", vodId)
+    .eq("status", "candidate")
+    .order("score", { ascending: false })
+    .limit(Math.min(Number(limit) || 3, 3));
+
+  if (error) throw error;
+
+  const rendered = [];
+  const errors = [];
+
+  for (const clip of clips || []) {
+    try {
+      rendered.push(await renderClip(clip.id));
+    } catch (err) {
+      console.error("AI auto-render clip failed:", err);
+      errors.push({ id: clip.id, error: err.message || "Unable to render clip." });
+    }
+  }
+
+  return { rendered, errors };
+}
+
 export async function listClips(vodId=null, limit=50) {
   let query = supabase.from("ai_stream_clips").select("*, ai_stream_vods(title,url,thumbnail_url)").order("created_at",{ascending:false}).limit(limit);
   if (vodId) query = query.eq("vod_id",vodId);
