@@ -204,7 +204,7 @@ async function downloadAudioPreview(sourceUrl, outputStem, durationSeconds) {
 }
 
 async function transcribeAudio(audioFile) {
-  if (getAIMode?.() !== "openai") return [];
+  if (!isAIProductionMode() && !process.env.OPENAI_API_KEY) return [];
   const stream = await fs.open(audioFile, "r");
   await stream.close();
   const file = await import("node:fs").then(m => m.createReadStream(audioFile));
