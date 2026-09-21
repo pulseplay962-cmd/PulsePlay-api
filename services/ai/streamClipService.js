@@ -214,7 +214,27 @@ async function transcribeAudio(audioFile) {
     response_format: "verbose_json",
     timestamp_granularities: ["segment"]
   });
-  return Array.isArray(response?.segments) ? response.segments : [];
+
+  // OpenAI SDK versions can expose verbose transcription responses as either
+  // an object or a JSON string. Normalize both shapes before analysis.
+  let normalized = response;
+  if (typeof response === "string") {
+    try {
+      normalized = JSON.parse(response);
+    } catch {
+      normalized = { text: response };
+    }
+  }
+
+  const segments = Array.isArray(normalized?.segments) ? normalized.segments : [];
+  console.log("AI transcription response:", {
+    type: typeof response,
+    keys: normalized && typeof normalized === "object" ? Object.keys(normalized) : [],
+    textLength: typeof normalized?.text === "string" ? normalized.text.length : 0,
+    segmentCount: segments.length
+  });
+
+  return segments;
 }
 
 async function detectMomentsFromTranscript({ vod, segments }) {
