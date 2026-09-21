@@ -15,180 +15,89 @@ import recommendationsRoutes from "./routes/recommendations.js";
 import streamClipsRoutes from "./routes/streamClips.js";
 
 const app = express();
-
 const PORT = process.env.PORT || 5000;
 
-// ========================
-// Middleware
-// ========================
+const allowedOrigins = [
+    "http://localhost:5173",
+    "http://localhost:5174",
+    "https://pulseplay-v2-f0wz.onrender.com",
+    "https://pulseplay.online",
+    "https://www.pulseplay.online"
+];
 
-app.use(
-    cors({
-        origin: [
-            "http://localhost:5173",
-            "http://localhost:5174",
-            "https://pulseplay-v2-f0wz.onrender.com",
-            "https://pulseplay.online",
-            "https://www.pulseplay.online"
-        ],
-        credentials: true,
-        methods: [
-            "GET",
-            "POST",
-            "PUT",
-            "DELETE",
-            "OPTIONS"
-        ],
-        allowedHeaders: [
-            "Content-Type",
-            "Authorization"
-        ]
-    })
-);
+const corsOptions = {
+    origin(origin, callback) {
+        if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+        return callback(new Error("CORS origin not allowed"));
+    },
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+    optionsSuccessStatus: 204
+};
 
-app.use(
-    "/api/stripe",
-    stripeWebhookRoutes
-);
+app.use(cors(corsOptions));
+app.options("*", cors(corsOptions));
 
-console.log(
-    "Stripe webhook mounted at /api/stripe/webhook"
-);
+app.use("/api/stripe", stripeWebhookRoutes);
+console.log("Stripe webhook mounted at /api/stripe/webhook");
 
 app.use(express.json());
 
-// ========================
-// Health Checks
-// ========================
+app.get("/", (req, res) => {
+    res.json({ success: true, message: "PulsePlay API is running 🚀" });
+});
 
-app.get(
-    "/",
-    (req, res) => {
-        res.json({
-            success: true,
-            message: "PulsePlay API is running 🚀"
-        });
-    }
-);
-
-app.get(
-    "/api/health",
-    (req, res) => {
-        res.json({
-            status: "ok",
-            service: "PulsePlay API"
-        });
-    }
-);
-
-// ========================
-// Routes
-// ========================
+app.get("/api/health", (req, res) => {
+    res.json({ status: "ok", service: "PulsePlay API" });
+});
 
 console.log("Loading Twitch routes...");
-
-app.use(
-    "/api/twitch",
-    twitchRoutes
-);
+app.use("/api/twitch", twitchRoutes);
 
 console.log("Loading AI routes...");
-
-app.use(
-    "/api/ai",
-    aiRoutes
-);
-
+app.use("/api/ai", aiRoutes);
 console.log("AI routes mounted at /api/ai");
 
 console.log("Loading News routes...");
-
-// TEMP TEST ROUTE
-app.get(
-    "/api/news/direct-test",
-    (req, res) => {
-        res.json({
-            success: true,
-            message: "Direct server news route works"
-        });
-    }
-);
-
-app.use(
-    "/api/news",
-    newsRoutes
-);
+app.get("/api/news/direct-test", (req, res) => {
+    res.json({ success: true, message: "Direct server news route works" });
+});
+app.use("/api/news", newsRoutes);
 
 console.log("Loading monetization routes...");
-
-app.use(
-    "/api/monetization",
-    monetizationRoutes
-);
-
-console.log(
-    "Monetization routes mounted at /api/monetization"
-);
+app.use("/api/monetization", monetizationRoutes);
+console.log("Monetization routes mounted at /api/monetization");
 
 console.log("Loading affiliate recommendation routes...");
+app.use("/api/recommendations", recommendationsRoutes);
 
-app.use(
-    "/api/recommendations",
-    recommendationsRoutes
-);
+app.use("/api/ai/stream-clips", streamClipsRoutes);
 
-app.use(
-    "/api/ai/stream-clips",
-    streamClipsRoutes
-);
-
-console.log(
-    "Affiliate recommendation routes mounted at /api/recommendations"
-);
-
+console.log("Affiliate recommendation routes mounted at /api/recommendations");
 console.log("Printful routes mounted at /api/printful");
 
-app.use(
-    "/api/printful",
-    printfulRoutes
-);
-
-app.use(
-    "/api/checkout",
-    checkoutRoutes
-);
+app.use("/api/printful", printfulRoutes);
+app.use("/api/checkout", checkoutRoutes);
 
 console.log("News routes mounted at /api/news");
 
-// ========================
-// Error Handler
-// ========================
+app.use((err, req, res, next) => {
+    console.error("Server Error:", err);
 
-app.use(
-    (err, req, res, next) => {
-        console.error(
-            "Server Error:",
-            err
-        );
-
-        res.status(500).json({
+    if (err.message === "CORS origin not allowed") {
+        return res.status(403).json({
             success: false,
-            error:
-                err.message ||
-                "Internal server error"
+            error: "CORS origin not allowed"
         });
     }
-);
 
-// ========================
-// Start Server
-// ========================
+    res.status(500).json({
+        success: false,
+        error: err.message || "Internal server error"
+    });
+});
 
-app.listen(
-    PORT,
-    () => {
-        console.log(
-            `PulsePlay API running on port ${PORT}`
-        );
-    }
-);
+app.listen(PORT, () => {
+    console.log("PulsePlay API running on port " + PORT);
+});
