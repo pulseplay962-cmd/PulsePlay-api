@@ -98,13 +98,38 @@ async function generateGrowthDraft(signals) {
             "Do not invent traffic numbers, product specifications, prices, game facts, or community reactions.",
             "If a page path is supplied, use it only as an internal PulsePlay reference and do not invent its page title.",
             "The article should naturally create an opportunity for relevant internal links or gaming gear recommendations.",
-            "Return ONLY valid JSON with title, category, body, social_caption, image_prompt."
+            "Return the requested structured fields only. Do not add commentary outside the fields."
         ].join("\n"),
         input: JSON.stringify({
             growth_signals: signals,
             target
         }),
-        max_output_tokens: 1400
+        text: {
+            format: {
+                type: "json_schema",
+                name: "pulseplay_growth_draft",
+                strict: true,
+                schema: {
+                    type: "object",
+                    additionalProperties: false,
+                    properties: {
+                        title: { type: "string" },
+                        category: { type: "string" },
+                        body: { type: "string" },
+                        social_caption: { type: "string" },
+                        image_prompt: { type: "string" }
+                    },
+                    required: [
+                        "title",
+                        "category",
+                        "body",
+                        "social_caption",
+                        "image_prompt"
+                    ]
+                }
+            }
+        },
+        max_output_tokens: 2000
     });
 
     const raw = response.output_text || "";
@@ -112,7 +137,18 @@ async function generateGrowthDraft(signals) {
     try {
         result = JSON.parse(raw);
     } catch {
-        throw new Error("Growth Manager returned invalid JSON.");
+        // Keep a defensive fallback for providers/models that return a fenced
+        // JSON object despite the structured-output request.
+        const fenced = raw.match(/\\{[\\s\\S]*\\}/);
+        if (!fenced) {
+            throw new Error("Growth Manager returned invalid JSON.");
+        }
+
+        try {
+            result = JSON.parse(fenced[0]);
+        } catch {
+            throw new Error("Growth Manager returned invalid JSON.");
+        }
     }
 
     if (!result.title || !result.body) {
