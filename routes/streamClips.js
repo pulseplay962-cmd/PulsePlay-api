@@ -1,6 +1,6 @@
 import express from "express";
 import { requireAdmin } from "../middleware/adminAuth.js";
-import { syncRecentStreamVods, listStreamVods, createClipCandidate, renderClip, listClips, analyzeVodForClipCandidates } from "../services/ai/streamClipService.js";
+import { syncRecentStreamVods, listStreamVods, createClipCandidate, renderClip, listClips, analyzeVodForClipCandidates, autoRenderTopClips } from "../services/ai/streamClipService.js";
 
 const router = express.Router();
 
@@ -22,6 +22,16 @@ router.post("/vods/:id/analyze", requireAdmin, async (req,res)=>{
   } catch(error) {
     console.error("AI VOD analysis error:",error);
     res.status(500).json({success:false,error:error.message||"Unable to analyze VOD."});
+  }
+});
+
+router.post("/vods/:id/auto-render", requireAdmin, async (req,res)=>{
+  try {
+    const result = await autoRenderTopClips(req.params.id, req.body?.limit || 3);
+    res.json({success:true,...result});
+  } catch(error) {
+    console.error("AI auto-render error:",error);
+    res.status(500).json({success:false,error:error.message||"Unable to auto-render clips."});
   }
 });
 
