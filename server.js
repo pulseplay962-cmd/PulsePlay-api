@@ -26,6 +26,7 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
+app.options(/.*/, cors(corsOptions));
 
 app.use("/api/stripe", stripeWebhookRoutes);
 console.log("Stripe webhook mounted at /api/stripe/webhook");
