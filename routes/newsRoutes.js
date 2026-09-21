@@ -22,6 +22,52 @@ router.get(
     }
 );
 
+// TEMPORARY FACEBOOK TOKEN VERIFICATION
+router.get(
+    "/facebook-verify",
+    async (req, res) => {
+        try {
+            const pageId = process.env.FACEBOOK_PAGE_ID?.trim();
+            const accessToken = process.env.FACEBOOK_PAGE_ACCESS_TOKEN?.trim();
+
+            if (!pageId || !accessToken) {
+                return res.status(500).json({
+                    success: false,
+                    error: "Facebook Page configuration is missing."
+                });
+            }
+
+            const response = await fetch(
+                `https://graph.facebook.com/v26.0/me?fields=id,name&access_token=${encodeURIComponent(accessToken)}`
+            );
+            const result = await response.json();
+
+            if (!response.ok || result.error) {
+                return res.status(500).json({
+                    success: false,
+                    error: result?.error?.message || "Facebook token verification failed."
+                });
+            }
+
+            return res.json({
+                success: true,
+                configuredPageId: pageId,
+                tokenIdentity: {
+                    id: result.id || null,
+                    name: result.name || null
+                },
+                matchesConfiguredPage: String(result.id || "") === String(pageId)
+            });
+        } catch (error) {
+            console.error("Facebook token verification error:", error);
+            return res.status(500).json({
+                success: false,
+                error: error.message
+            });
+        }
+    }
+);
+
 // TEMPORARY CONTROLLED FACEBOOK TEST
 router.get(
     "/facebook-test",
