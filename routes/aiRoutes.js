@@ -15,6 +15,10 @@ import {
 } from "../middleware/adminAuth.js";
 
 import {
+    runGrowthManager
+} from "../services/ai/growthManagerService.js";
+
+import {
     publishAIContent
 } from "../services/ai/publisherService.js";
 
