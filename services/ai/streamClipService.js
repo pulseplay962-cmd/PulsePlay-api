@@ -151,10 +151,28 @@ export async function renderClip(clipId) {
 
 
 function parseDuration(value) {
-  if (!value) return 0;
-  const m = String(value).match(/^(?:(\d+):)?(\d+):(\d+)(?:\.(\d+))?$/);
-  if (!m) return Number(value) || 0;
-  return (Number(m[1]||0)*3600)+(Number(m[2]||0)*60)+Number(m[3]||0);
+  if (value === null || value === undefined || value === "") return 0;
+
+  const raw = String(value).trim();
+
+  // Twitch VOD durations are commonly returned as strings such as:
+  // "1h23m45s", "23m45s", or "45s".
+  const twitch = raw.match(/^(?:(\\d+)h)?(?:(\\d+)m)?(?:(\\d+)s)?$/i);
+  if (twitch && twitch[0]) {
+    const hours = Number(twitch[1] || 0);
+    const minutes = Number(twitch[2] || 0);
+    const seconds = Number(twitch[3] || 0);
+    return (hours * 3600) + (minutes * 60) + seconds;
+  }
+
+  // Also accept HH:MM:SS / MM:SS formats for existing or manually stored VODs.
+  const colon = raw.match(/^(?:(\\d+):)?(\\d+):(\\d+)(?:\\.(\\d+))?$/);
+  if (colon) {
+    return (Number(colon[1] || 0) * 3600) + (Number(colon[2] || 0) * 60) + Number(colon[3] || 0);
+  }
+
+  const numeric = Number(raw);
+  return Number.isFinite(numeric) ? numeric : 0;
 }
 
 async function downloadAudioPreview(sourceUrl, outputFile, durationSeconds) {
