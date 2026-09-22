@@ -44,7 +44,8 @@ async function processQueue() {
     try {
       console.log("AI clip worker starting:", { clipId: job.clipId, queued: queue.length });
       const db = workerClient();
-      if (job.mode === "vertical") await renderVerticalClip(job.clipId, db);\n      else await renderClip(job.clipId, db);
+      if (job.mode === "vertical") await renderVerticalClip(job.clipId, db);
+      else await renderClip(job.clipId, db);
       console.log("AI clip worker completed:", { clipId: job.clipId });
     } catch (error) {
       console.error("AI clip worker failed:", {
