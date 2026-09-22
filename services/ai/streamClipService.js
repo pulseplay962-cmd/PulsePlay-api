@@ -560,6 +560,51 @@ export async function queueVerticalClipRender(clipId, authorization = "") {
   return result;
 }
 
+export async function queueCaptionedVerticalClipRender(clipId, authorization = "") {
+  const workerUrl = process.env.CLIP_RENDER_WORKER_URL?.trim();
+  const workerSecret = process.env.CLIP_RENDER_WORKER_SECRET?.trim();
+  if (!workerUrl || !workerSecret) throw new Error("AI clip render worker is not configured.");
+  if (!authorization.startsWith("Bearer ")) throw new Error("Administrator authorization is required to render captions.");
+
+  const { data: clip, error } = await supabase.from("ai_stream_clips").select("id,vertical_clip_url").eq("id", clipId).single();
+  if (error || !clip) throw new Error("Clip candidate not found.");
+  if (!clip.vertical_clip_url) throw new Error("Create the 9:16 vertical clip first.");
+
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "pulseplay-caption-source-"));
+  const audioFile = path.join(tempDir, clipId + ".mp4");
+  try {
+    const response = await fetch(clip.vertical_clip_url);
+    if (!response.ok) throw new Error("Unable to download vertical clip for caption generation.");
+    await fs.writeFile(audioFile, Buffer.from(await response.arrayBuffer()));
+    if (!isAIProductionMode() && !process.env.OPENAI_API_KEY) throw new Error("OpenAI is not configured for caption generation.");
+
+    const file = await import("node:fs").then(m => m.createReadStream(audioFile));
+    const transcription = await openai.audio.transcriptions.create({
+      file,
+      model: process.env.PULSEAI_TRANSCRIPTION_MODEL || "whisper-1",
+      response_format: "verbose_json",
+      timestamp_granularities: ["segment"]
+    });
+    const segments = Array.isArray(transcription?.segments) ? transcription.segments : [];
+    if (!segments.length) throw new Error("AI transcription returned no timestamped caption segments.");
+
+    const captions = segments.map(s => ({ start:Number(s.start)||0, end:Number(s.end)||0, text:String(s.text||"").trim() })).filter(s => s.end > s.start && s.text).slice(0,250);
+    const endpoint = workerUrl.endsWith("/") ? workerUrl.slice(0,-1) : workerUrl;
+    const workerResponse = await fetch(endpoint + "/render-captioned-vertical", {
+      method:"POST",
+      headers:{"Content-Type":"application/json","X-Clip-Worker-Secret":workerSecret},
+      body:JSON.stringify({clipId,captions})
+    });
+    const bodyText = await workerResponse.text();
+    let result = {};
+    try { result = JSON.parse(bodyText || "{}"); } catch {}
+    if (!workerResponse.ok || !result.success) throw new Error(result.error || "Unable to queue captioned clip render.");
+    return result;
+  } finally {
+    await fs.rm(tempDir,{recursive:true,force:true}).catch(()=>{});
+  }
+}
+
 export async function listClips(vodId=null, limit=50) {
   let query = supabase.from("ai_stream_clips").select("*, ai_stream_vods(title,url,thumbnail_url)").order("created_at",{ascending:false}).limit(limit);
   if (vodId) query = query.eq("vod_id",vodId);
