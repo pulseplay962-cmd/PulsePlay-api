@@ -3,7 +3,7 @@ dotenv.config();
 
 import express from "express";
 import { createClient } from "@supabase/supabase-js";
-import { renderClip, renderVerticalClip } from "./services/ai/streamClipService.js";
+import { renderClip, renderVerticalClip, renderCaptionedVerticalClip } from "./services/ai/streamClipService.js";
 
 const app = express();
 const PORT = process.env.PORT || 10000;
@@ -44,7 +44,8 @@ async function processQueue() {
     try {
       console.log("AI clip worker starting:", { clipId: job.clipId, queued: queue.length });
       const db = workerClient();
-      if (job.mode === "vertical") await renderVerticalClip(job.clipId, db);
+      if (job.mode === "captioned-vertical") await renderCaptionedVerticalClip(job.clipId, job.captions, db);
+      else if (job.mode === "vertical") await renderVerticalClip(job.clipId, db);
       else await renderClip(job.clipId, db);
       console.log("AI clip worker completed:", { clipId: job.clipId });
     } catch (error) {
@@ -69,6 +70,17 @@ app.get("/", (req, res) => {
 
 app.get("/health", (req, res) => {
   res.json({ success: true, status: "ok", processing, queued: queue.length });
+});
+
+app.post("/render-captioned-vertical", (req, res) => {
+  if (!authorized(req)) return res.status(401).json({ success: false, error: "Unauthorized render worker request." });
+  const clipId = String(req.body?.clipId || "").trim();
+  const captions = Array.isArray(req.body?.captions) ? req.body.captions : [];
+  if (!clipId || !captions.length) return res.status(400).json({ success: false, error: "clipId and captions are required." });
+  if (queue.some((job) => job.clipId === clipId && job.mode === "captioned-vertical")) return res.status(202).json({ success: true, queued: true, duplicate: true, message: "Captioned clip is already queued.", queueLength: queue.length });
+  queue.push({ clipId, mode: "captioned-vertical", captions });
+  void processQueue();
+  return res.status(202).json({ success: true, queued: true, mode: "captioned-vertical", message: "Captioned vertical clip queued.", queueLength: queue.length });
 });
 
 app.post("/render-vertical", (req, res) => {
