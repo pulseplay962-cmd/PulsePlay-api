@@ -1,11 +1,15 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import ytdlp from "youtube-dl-exec";
 import ffmpegStaticPath from "ffmpeg-static";
 import openai, { getAIMode, isAIProductionMode } from "./openaiService.js";
 import { supabase } from "../../lib/supabase.js";
 import { fetchRecentVideos } from "../twitch.js";
+
+const execFileAsync = promisify(execFile);
 
 const DEFAULT_CHANNEL = process.env.TWITCH_CHANNEL || "Veiltactician";
 const TITLE_MODEL = process.env.PULSEAI_MODEL || "gpt-4.1-mini";
@@ -182,6 +186,34 @@ export async function renderClip(clipId, db = supabase) {
   }
 }
 
+
+export async function renderVerticalClip(clipId, db = supabase) {
+  const { data: clip, error } = await db.from("ai_stream_clips").select("*").eq("id", clipId).single();
+  if (error || !clip) throw new Error("Clip candidate not found.");
+  if (!clip.clip_url) throw new Error("Render the master MP4 before creating the vertical version.");
+
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "pulseplay-vertical-"));
+  const inputFile = path.join(tempDir, clipId + "-master.mp4");
+  const outputFile = path.join(tempDir, clipId + "-vertical.mp4");
+  const bucket = process.env.AI_MEDIA_BUCKET || "ai-media";
+
+  try {
+    const response = await fetch(clip.clip_url);
+    if (!response.ok) throw new Error("Unable to download master clip (HTTP " + response.status + ").");
+    await fs.writeFile(inputFile, Buffer.from(await response.arrayBuffer()));
+    await execFileAsync(ffmpegPath, ["-y", "-i", inputFile, "-vf", "scale=720:1280:force_original_aspect_ratio=increase,crop=720:1280,setsar=1", "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", outputFile], { maxBuffer: 4194304 });
+    const buffer = await fs.readFile(outputFile);
+    const storagePath = "ai-stream-clips/vertical/" + new Date().getUTCFullYear() + "/" + clipId + ".mp4";
+    const upload = await db.storage.from(bucket).upload(storagePath, buffer, { contentType: "video/mp4", upsert: true });
+    if (upload.error) throw upload.error;
+    const clipUrl = db.storage.from(bucket).getPublicUrl(storagePath)?.data?.publicUrl || null;
+    const { data: updated, error: updateError } = await db.from("ai_stream_clips").update({ vertical_clip_url: clipUrl }).eq("id", clipId).select().single();
+    if (updateError) throw updateError;
+    return updated;
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+  }
+}
 
 function parseDuration(value) {
   if (value === null || value === undefined || value === "") return 0;
