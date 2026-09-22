@@ -124,8 +124,10 @@ async function downloadClip(sourceUrl, startSeconds, endSeconds, outputFile) {
     quiet: true,
     noWarnings: true,
     concurrentFragments: 1,
-    retries: 2,
-    fragmentRetries: 2
+    retries: 1,
+    fragmentRetries: 1,
+    socketTimeout: 30,
+    timeout: 5 * 60 * 1000
   });
 }
 
