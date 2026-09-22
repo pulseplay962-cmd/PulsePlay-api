@@ -344,13 +344,43 @@ export async function analyzeVodForClipCandidates(vodId) {
 }
 
 export async function autoRenderTopClips(vodId, limit = 3) {
+  const maxClips = Math.min(Math.max(Number(limit) || 3, 1), 3);
+  const staleBefore = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+
+  // Recover clips left in "rendering" by a crashed, timed-out, or restarted
+  // Render instance. Active renders update their status when they begin and
+  // normally finish well before this recovery window.
+  const { data: staleRendering, error: staleError } = await supabase
+    .from("ai_stream_clips")
+    .select("id,updated_at")
+    .eq("vod_id", vodId)
+    .eq("status", "rendering")
+    .lt("updated_at", staleBefore);
+
+  if (staleError) throw staleError;
+
+  if (staleRendering?.length) {
+    const staleIds = staleRendering.map((clip) => clip.id);
+    const { error: resetError } = await supabase
+      .from("ai_stream_clips")
+      .update({
+        status: "candidate",
+        error: "Recovered from an interrupted render.",
+      })
+      .in("id", staleIds);
+
+    if (resetError) throw resetError;
+
+    console.log("AI auto-render recovered stale clips:", staleIds.length);
+  }
+
   const { data: clips, error } = await supabase
     .from("ai_stream_clips")
     .select("*")
     .eq("vod_id", vodId)
     .eq("status", "candidate")
     .order("score", { ascending: false })
-    .limit(Math.min(Number(limit) || 3, 3));
+    .limit(maxClips);
 
   if (error) throw error;
 
@@ -366,7 +396,15 @@ export async function autoRenderTopClips(vodId, limit = 3) {
     }
   }
 
-  return { rendered, errors };
+  console.log("AI auto-render selection:", {
+    vodId,
+    requested: maxClips,
+    selected: clips?.length || 0,
+    rendered: rendered.length,
+    errors: errors.length,
+  });
+
+  return { rendered, errors, selected: clips?.length || 0 };
 }
 
 export async function listClips(vodId=null, limit=50) {
