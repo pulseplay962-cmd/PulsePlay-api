@@ -1,6 +1,6 @@
 import express from "express";
 import { requireAdmin } from "../middleware/adminAuth.js";
-import { syncRecentStreamVods, listStreamVods, createClipCandidate, renderClip, renderVerticalClip, queueVerticalClipRender, listClips, analyzeVodForClipCandidates, autoRenderTopClips } from "../services/ai/streamClipService.js";
+import { syncRecentStreamVods, listStreamVods, createClipCandidate, renderClip, renderVerticalClip, queueVerticalClipRender, queueCaptionedVerticalClipRender, listClips, analyzeVodForClipCandidates, autoRenderTopClips } from "../services/ai/streamClipService.js";
 
 const router = express.Router();
 
@@ -50,6 +50,17 @@ router.post("/vods/:id/auto-render", requireAdmin, async (req,res)=>{
     if (!res.headersSent) {
       res.status(500).json({success:false,error:error.message||"Unable to start auto-render."});
     }
+  }
+});
+
+router.post("/:id/render-captioned-vertical", requireAdmin, async (req,res)=>{
+  try {
+    const authorization = req.headers.authorization || "";
+    const result = await queueCaptionedVerticalClipRender(req.params.id, authorization);
+    res.status(202).json({success:true,queued:true,...result});
+  } catch(error) {
+    console.error("AI captioned vertical render error:",error);
+    res.status(500).json({success:false,error:error.message||"Unable to create captioned vertical clip."});
   }
 });
 
