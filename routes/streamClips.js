@@ -1,6 +1,6 @@
 import express from "express";
 import { requireAdmin } from "../middleware/adminAuth.js";
-import { syncRecentStreamVods, listStreamVods, createClipCandidate, renderClip, listClips, analyzeVodForClipCandidates, autoRenderTopClips } from "../services/ai/streamClipService.js";
+import { syncRecentStreamVods, listStreamVods, createClipCandidate, renderClip, renderVerticalClip, listClips, analyzeVodForClipCandidates, autoRenderTopClips } from "../services/ai/streamClipService.js";
 
 const router = express.Router();
 
@@ -51,6 +51,11 @@ router.post("/vods/:id/auto-render", requireAdmin, async (req,res)=>{
       res.status(500).json({success:false,error:error.message||"Unable to start auto-render."});
     }
   }
+});
+
+router.post("/:id/render-vertical", requireAdmin, async (req,res)=>{
+  try { res.json({success:true,clip:await renderVerticalClip(req.params.id)}); }
+  catch(error) { console.error("AI vertical clip render error:",error); res.status(500).json({success:false,error:error.message||"Unable to render vertical clip."}); }
 });
 
 router.get("/clips", requireAdmin, async (req,res)=>{
