@@ -9,10 +9,10 @@ const app = express();
 const PORT = process.env.PORT || 10000;
 const WORKER_SECRET = process.env.CLIP_RENDER_WORKER_SECRET || "";
 const SUPABASE_URL = process.env.SUPABASE_URL?.trim();
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+const SUPABASE_PUBLISHABLE_KEY = process.env.SUPABASE_PUBLISHABLE_KEY?.trim();
 
 if (!SUPABASE_URL) throw new Error("Missing SUPABASE_URL");
-if (!SUPABASE_SERVICE_ROLE_KEY) throw new Error("Missing SUPABASE_SERVICE_ROLE_KEY");
+if (!SUPABASE_PUBLISHABLE_KEY) throw new Error("Missing SUPABASE_PUBLISHABLE_KEY");
 if (!WORKER_SECRET) throw new Error("Missing CLIP_RENDER_WORKER_SECRET");
 
 app.use(express.json({ limit: "64kb" }));
@@ -24,8 +24,8 @@ function authorized(req) {
   return req.headers["x-clip-worker-secret"] === WORKER_SECRET;
 }
 
-function adminClient() {
-  return createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+function workerClient() {
+  return createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
     auth: {
       autoRefreshToken: false,
       persistSession: false,
@@ -43,7 +43,7 @@ async function processQueue() {
 
     try {
       console.log("AI clip worker starting:", { clipId: job.clipId, queued: queue.length });
-      const db = adminClient();
+      const db = workerClient();
       await renderClip(job.clipId, db);
       console.log("AI clip worker completed:", { clipId: job.clipId });
     } catch (error) {
