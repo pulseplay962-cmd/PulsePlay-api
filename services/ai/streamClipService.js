@@ -109,16 +109,23 @@ export async function createClipCandidate({ vodId, startSeconds, endSeconds, mom
 
 async function downloadClip(sourceUrl, startSeconds, endSeconds, outputFile) {
   if (!ffmpegPath) throw new Error("FFmpeg is not available in this deployment.");
+
+  // Render free instances have limited memory. Avoid selecting a full-quality
+  // video+audio pair because ffmpeg can spike memory and restart the service.
+  // Use the lowest available MP4 stream and only one fragment at a time.
   await ytdlp(sourceUrl, {
     output: outputFile,
-    format: "bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/b",
-    mergeOutputFormat:"mp4",
-    downloadSections:`*${startSeconds}-${endSeconds}`,
-    forceKeyframesAtCuts:true,
-    ffmpegLocation:ffmpegPath,
-    noPlaylist:true,
-    quiet:true,
-    noWarnings:true
+    format: "worst[ext=mp4]/worst",
+    mergeOutputFormat: "mp4",
+    downloadSections: `*${startSeconds}-${endSeconds}`,
+    forceKeyframesAtCuts: true,
+    ffmpegLocation: ffmpegPath,
+    noPlaylist: true,
+    quiet: true,
+    noWarnings: true,
+    concurrentFragments: 1,
+    retries: 2,
+    fragmentRetries: 2
   });
 }
 
