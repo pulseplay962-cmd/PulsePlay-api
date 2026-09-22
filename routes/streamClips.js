@@ -54,7 +54,8 @@ router.post("/vods/:id/auto-render", requireAdmin, async (req,res)=>{
 });
 
 router.post("/:id/render-vertical", requireAdmin, async (req,res)=>{
-  try { const authorization = req.headers.authorization || "";\n    const result = await queueVerticalClipRender(req.params.id, authorization);\n    res.status(202).json({success:true,queued:true,...result}); }
+  try { const authorization = req.headers.authorization || "";
+    const result = await queueVerticalClipRender(req.params.id, authorization);\n    res.status(202).json({success:true,queued:true,...result}); }
   catch(error) { console.error("AI vertical clip render error:",error); res.status(500).json({success:false,error:error.message||"Unable to render vertical clip."}); }
 });
 
