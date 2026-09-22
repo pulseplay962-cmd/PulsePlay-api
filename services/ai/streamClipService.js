@@ -492,6 +492,24 @@ export async function autoRenderTopClips(vodId, limit = 3, authorization = "") {
   return { queued, errors, selected: clips?.length || 0 };
 }
 
+export async function queueVerticalClipRender(clipId, authorization = "") {
+  const workerUrl = process.env.CLIP_RENDER_WORKER_URL?.trim();
+  const workerSecret = process.env.CLIP_RENDER_WORKER_SECRET?.trim();
+  if (!workerUrl || !workerSecret) throw new Error("AI clip render worker is not configured.");
+  if (!authorization.startsWith("Bearer ")) throw new Error("Administrator authorization is required to render clips.");
+  const endpoint = workerUrl.endsWith("/") ? workerUrl.slice(0, -1) : workerUrl;
+  const response = await fetch(endpoint + "/render-vertical", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Clip-Worker-Secret": workerSecret },
+    body: JSON.stringify({ clipId })
+  });
+  const text = await response.text();
+  let result = {};
+  try { result = JSON.parse(text || "{}"); } catch {}
+  if (!response.ok || !result.success) throw new Error(result.error || "Unable to queue vertical clip render.");
+  return result;
+}
+
 export async function listClips(vodId=null, limit=50) {
   let query = supabase.from("ai_stream_clips").select("*, ai_stream_vods(title,url,thumbnail_url)").order("created_at",{ascending:false}).limit(limit);
   if (vodId) query = query.eq("vod_id",vodId);
