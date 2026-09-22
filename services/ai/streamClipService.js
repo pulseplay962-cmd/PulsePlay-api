@@ -399,7 +399,8 @@ export async function autoRenderTopClips(vodId, limit = 3, authorization = "") {
 
   for (const clip of clips || []) {
     try {
-      const response = await fetch(`${workerUrl.replace(/\\/$/, "")}/render`, {
+      const workerEndpoint = workerUrl.endsWith("/") ? workerUrl.slice(0, -1) : workerUrl;
+      const response = await fetch(`${workerEndpoint}/render`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
