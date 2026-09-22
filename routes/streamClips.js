@@ -35,10 +35,11 @@ router.post("/vods/:id/auto-render", requireAdmin, async (req,res)=>{
       limit
     });
 
-    void autoRenderTopClips(req.params.id, limit).then((result) => {
+    const authorization = req.headers.authorization || "";
+    void autoRenderTopClips(req.params.id, limit, authorization).then((result) => {
       console.log("AI auto-render background complete:", {
         vodId: req.params.id,
-        rendered: result.rendered?.length || 0,
+        queued: result.queued?.length || 0,
         errors: result.errors?.length || 0
       });
     }).catch((error) => {
