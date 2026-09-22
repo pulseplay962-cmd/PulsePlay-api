@@ -129,8 +129,8 @@ async function downloadClip(sourceUrl, startSeconds, endSeconds, outputFile) {
   });
 }
 
-export async function renderClip(clipId) {
-  const { data: clip, error } = await supabase.from("ai_stream_clips").select("*, ai_stream_vods(*)").eq("id", clipId).single();
+export async function renderClip(clipId, db = supabase) {
+  const { data: clip, error } = await db.from("ai_stream_clips").select("*, ai_stream_vods(*)").eq("id", clipId).single();
   if (error || !clip) throw new Error("Clip candidate not found.");
   if (!clip.source_url) throw new Error("The VOD does not have a source URL.");
 
@@ -139,18 +139,18 @@ export async function renderClip(clipId) {
   const bucket = process.env.AI_MEDIA_BUCKET || "ai-media";
 
   try {
-    await supabase.from("ai_stream_clips").update({status:"rendering",error:null}).eq("id",clipId);
+    await db.from("ai_stream_clips").update({status:"rendering",error:null}).eq("id",clipId);
     await downloadClip(clip.source_url,clip.start_seconds,clip.end_seconds,outputFile);
     const buffer = await fs.readFile(outputFile);
     const storagePath = `ai-stream-clips/${new Date().getUTCFullYear()}/${clipId}.mp4`;
-    const upload = await supabase.storage.from(bucket).upload(storagePath,buffer,{contentType:"video/mp4",upsert:true});
+    const upload = await db.storage.from(bucket).upload(storagePath,buffer,{contentType:"video/mp4",upsert:true});
     if (upload.error) throw upload.error;
-    const clipUrl = supabase.storage.from(bucket).getPublicUrl(storagePath)?.data?.publicUrl || null;
-    const { data: updated, error:updateError } = await supabase.from("ai_stream_clips").update({clip_url:clipUrl,status:"ready",error:null}).eq("id",clipId).select().single();
+    const clipUrl = db.storage.from(bucket).getPublicUrl(storagePath)?.data?.publicUrl || null;
+    const { data: updated, error:updateError } = await db.from("ai_stream_clips").update({clip_url:clipUrl,status:"ready",error:null}).eq("id",clipId).select().single();
     if (updateError) throw updateError;
     return updated;
   } catch (err) {
-    await supabase.from("ai_stream_clips").update({status:"failed",error:err.message || "Clip rendering failed."}).eq("id",clipId);
+    await db.from("ai_stream_clips").update({status:"failed",error:err.message || "Clip rendering failed."}).eq("id",clipId);
     throw err;
   } finally {
     await fs.rm(tempDir,{recursive:true,force:true}).catch(()=>{});
@@ -350,13 +350,20 @@ export async function analyzeVodForClipCandidates(vodId) {
   }
 }
 
-export async function autoRenderTopClips(vodId, limit = 3) {
+export async function autoRenderTopClips(vodId, limit = 3, authorization = "") {
   const maxClips = Math.min(Math.max(Number(limit) || 3, 1), 3);
-  const staleBefore = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+  const workerUrl = process.env.CLIP_RENDER_WORKER_URL?.trim();
+  const workerSecret = process.env.CLIP_RENDER_WORKER_SECRET?.trim();
 
-  // Recover clips left in "rendering" by a crashed, timed-out, or restarted
-  // Render instance. Active renders update their status when they begin and
-  // normally finish well before this recovery window.
+  if (!workerUrl || !workerSecret) {
+    throw new Error("AI clip render worker is not configured.");
+  }
+
+  if (!authorization.startsWith("Bearer ")) {
+    throw new Error("Administrator authorization is required to start clip rendering.");
+  }
+
+  const staleBefore = new Date(Date.now() - 10 * 60 * 1000).toISOString();
   const { data: staleRendering, error: staleError } = await supabase
     .from("ai_stream_clips")
     .select("id,updated_at")
@@ -370,14 +377,10 @@ export async function autoRenderTopClips(vodId, limit = 3) {
     const staleIds = staleRendering.map((clip) => clip.id);
     const { error: resetError } = await supabase
       .from("ai_stream_clips")
-      .update({
-        status: "candidate",
-        error: "Recovered from an interrupted render.",
-      })
+      .update({ status: "candidate", error: "Recovered from an interrupted render." })
       .in("id", staleIds);
 
     if (resetError) throw resetError;
-
     console.log("AI auto-render recovered stale clips:", staleIds.length);
   }
 
@@ -391,27 +394,44 @@ export async function autoRenderTopClips(vodId, limit = 3) {
 
   if (error) throw error;
 
-  const rendered = [];
+  const queued = [];
   const errors = [];
 
   for (const clip of clips || []) {
     try {
-      rendered.push(await renderClip(clip.id));
+      const response = await fetch(`${workerUrl.replace(/\\/$/, "")}/render`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Clip-Worker-Secret": workerSecret,
+        },
+        body: JSON.stringify({ clipId: clip.id, authorization }),
+      });
+
+      const text = await response.text();
+      let result = {};
+      try { result = JSON.parse(text || "{}"); } catch {}
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || `Render worker returned HTTP ${response.status}.`);
+      }
+
+      queued.push({ id: clip.id, queueLength: result.queueLength || 0 });
     } catch (err) {
-      console.error("AI auto-render clip failed:", err);
-      errors.push({ id: clip.id, error: err.message || "Unable to render clip." });
+      console.error("AI auto-render queue failed:", err);
+      errors.push({ id: clip.id, error: err.message || "Unable to queue clip render." });
     }
   }
 
-  console.log("AI auto-render selection:", {
+  console.log("AI auto-render queued:", {
     vodId,
     requested: maxClips,
     selected: clips?.length || 0,
-    rendered: rendered.length,
+    queued: queued.length,
     errors: errors.length,
   });
 
-  return { rendered, errors, selected: clips?.length || 0 };
+  return { queued, errors, selected: clips?.length || 0 };
 }
 
 export async function listClips(vodId=null, limit=50) {
