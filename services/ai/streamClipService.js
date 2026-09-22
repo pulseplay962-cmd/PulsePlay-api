@@ -215,6 +215,56 @@ export async function renderVerticalClip(clipId, db = supabase) {
   }
 }
 
+export async function renderCaptionedVerticalClip(clipId, captions = [], db = supabase) {
+  const { data: clip, error } = await db.from("ai_stream_clips").select("*").eq("id", clipId).single();
+  if (error || !clip) throw new Error("Clip candidate not found.");
+  if (!clip.vertical_clip_url) throw new Error("Create the 9:16 vertical clip first.");
+  if (!Array.isArray(captions) || !captions.length) throw new Error("No caption segments were supplied.");
+
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "pulseplay-captioned-"));
+  const inputFile = path.join(tempDir, clipId + "-vertical.mp4");
+  const outputFile = path.join(tempDir, clipId + "-captioned.mp4");
+  const srtFile = path.join(tempDir, clipId + ".srt");
+  const bucket = process.env.AI_MEDIA_BUCKET || "ai-media";
+
+  const srtTime = (seconds) => {
+    const totalMs = Math.max(0, Math.round(Number(seconds || 0) * 1000));
+    const h = Math.floor(totalMs / 3600000);
+    const m = Math.floor((totalMs % 3600000) / 60000);
+    const s = Math.floor((totalMs % 60000) / 1000);
+    const ms = totalMs % 1000;
+    return h + ":" + String(m).padStart(2,"0") + ":" + String(s).padStart(2,"0") + "," + String(ms).padStart(3,"0");
+  };
+
+  try {
+    const response = await fetch(clip.vertical_clip_url);
+    if (!response.ok) throw new Error("Unable to download vertical clip (HTTP " + response.status + ").");
+    await fs.writeFile(inputFile, Buffer.from(await response.arrayBuffer()));
+
+    const usable = captions
+      .map((c) => ({ start: Number(c.start), end: Number(c.end), text: String(c.text || "").trim() }))
+      .filter((c) => Number.isFinite(c.start) && Number.isFinite(c.end) && c.end > c.start && c.text)
+      .slice(0, 250);
+
+    const srt = usable.map((c, i) => (i + 1) + "\n" + srtTime(c.start) + " --> " + srtTime(c.end) + "\n" + c.text.replace(/\\r?\\n/g, " ") + "\n").join("\n");
+    await fs.writeFile(srtFile, srt, "utf8");
+
+    const filter = "subtitles=" + srtFile + ":force_style='FontName=Arial,FontSize=18,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BorderStyle=3,Outline=2,Shadow=1,Alignment=2,MarginV=80'";
+    await execFileAsync(ffmpegPath, ["-y","-i",inputFile,"-vf",filter,"-c:v","libx264","-preset","veryfast","-crf","23","-c:a","aac","-b:a","128k","-movflags","+faststart",outputFile], { maxBuffer: 4194304 });
+
+    const buffer = await fs.readFile(outputFile);
+    const storagePath = "ai-stream-clips/captioned/" + new Date().getUTCFullYear() + "/" + clipId + ".mp4";
+    const upload = await db.storage.from(bucket).upload(storagePath, buffer, { contentType:"video/mp4", upsert:true });
+    if (upload.error) throw upload.error;
+    const captionedUrl = db.storage.from(bucket).getPublicUrl(storagePath)?.data?.publicUrl || null;
+    const { data: updated, error:updateError } = await db.from("ai_stream_clips").update({ captioned_vertical_clip_url: captionedUrl }).eq("id", clipId).select().single();
+    if (updateError) throw updateError;
+    return updated;
+  } finally {
+    await fs.rm(tempDir, { recursive:true, force:true }).catch(()=>{});
+  }
+}
+
 function parseDuration(value) {
   if (value === null || value === undefined || value === "") return 0;
 
