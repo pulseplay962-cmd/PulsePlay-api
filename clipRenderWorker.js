@@ -3,7 +3,7 @@ dotenv.config();
 
 import express from "express";
 import { createClient } from "@supabase/supabase-js";
-import { renderClip } from "./services/ai/streamClipService.js";
+import { renderClip, renderVerticalClip } from "./services/ai/streamClipService.js";
 
 const app = express();
 const PORT = process.env.PORT || 10000;
@@ -44,7 +44,7 @@ async function processQueue() {
     try {
       console.log("AI clip worker starting:", { clipId: job.clipId, queued: queue.length });
       const db = workerClient();
-      await renderClip(job.clipId, db);
+      if (job.mode === "vertical") await renderVerticalClip(job.clipId, db);\n      else await renderClip(job.clipId, db);
       console.log("AI clip worker completed:", { clipId: job.clipId });
     } catch (error) {
       console.error("AI clip worker failed:", {
@@ -68,6 +68,16 @@ app.get("/", (req, res) => {
 
 app.get("/health", (req, res) => {
   res.json({ success: true, status: "ok", processing, queued: queue.length });
+});
+
+app.post("/render-vertical", (req, res) => {
+  if (!authorized(req)) return res.status(401).json({ success: false, error: "Unauthorized render worker request." });
+  const clipId = String(req.body?.clipId || "").trim();
+  if (!clipId) return res.status(400).json({ success: false, error: "clipId is required." });
+  if (queue.some((job) => job.clipId === clipId && job.mode === "vertical")) return res.status(202).json({ success: true, queued: true, duplicate: true, message: "Vertical clip is already queued.", queueLength: queue.length });
+  queue.push({ clipId, mode: "vertical" });
+  void processQueue();
+  return res.status(202).json({ success: true, queued: true, mode: "vertical", message: "Vertical clip queued for background rendering.", queueLength: queue.length });
 });
 
 app.post("/render", (req, res) => {
