@@ -9,10 +9,10 @@ const app = express();
 const PORT = process.env.PORT || 10000;
 const WORKER_SECRET = process.env.CLIP_RENDER_WORKER_SECRET || "";
 const SUPABASE_URL = process.env.SUPABASE_URL?.trim();
-const SUPABASE_PUBLISHABLE_KEY = process.env.SUPABASE_PUBLISHABLE_KEY?.trim();
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
 
 if (!SUPABASE_URL) throw new Error("Missing SUPABASE_URL");
-if (!SUPABASE_PUBLISHABLE_KEY) throw new Error("Missing SUPABASE_PUBLISHABLE_KEY");
+if (!SUPABASE_SERVICE_ROLE_KEY) throw new Error("Missing SUPABASE_SERVICE_ROLE_KEY");
 if (!WORKER_SECRET) throw new Error("Missing CLIP_RENDER_WORKER_SECRET");
 
 app.use(express.json({ limit: "64kb" }));
@@ -24,17 +24,12 @@ function authorized(req) {
   return req.headers["x-clip-worker-secret"] === WORKER_SECRET;
 }
 
-function adminClient(accessToken) {
-  return createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+function adminClient() {
+  return createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
     auth: {
       autoRefreshToken: false,
       persistSession: false,
       detectSessionInUrl: false,
-    },
-    global: {
-      headers: {
-        Authorization: accessToken,
-      },
     },
   });
 }
@@ -48,7 +43,7 @@ async function processQueue() {
 
     try {
       console.log("AI clip worker starting:", { clipId: job.clipId, queued: queue.length });
-      const db = adminClient(job.authorization);
+      const db = adminClient();
       await renderClip(job.clipId, db);
       console.log("AI clip worker completed:", { clipId: job.clipId });
     } catch (error) {
@@ -81,12 +76,11 @@ app.post("/render", (req, res) => {
   }
 
   const clipId = String(req.body?.clipId || "").trim();
-  const authorization = String(req.body?.authorization || "").trim();
 
-  if (!clipId || !authorization.startsWith("Bearer ")) {
+  if (!clipId) {
     return res.status(400).json({
       success: false,
-      error: "clipId and a Bearer authorization token are required.",
+      error: "clipId is required.",
     });
   }
 
@@ -100,7 +94,7 @@ app.post("/render", (req, res) => {
     });
   }
 
-  queue.push({ clipId, authorization });
+  queue.push({ clipId });
   void processQueue();
 
   return res.status(202).json({
