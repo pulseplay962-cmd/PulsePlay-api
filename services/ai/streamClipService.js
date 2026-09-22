@@ -110,24 +110,48 @@ export async function createClipCandidate({ vodId, startSeconds, endSeconds, mom
 async function downloadClip(sourceUrl, startSeconds, endSeconds, outputFile) {
   if (!ffmpegPath) throw new Error("FFmpeg is not available in this deployment.");
 
-  // Render free instances have limited memory. Avoid selecting a full-quality
-  // video+audio pair because ffmpeg can spike memory and restart the service.
-  // Use the lowest available MP4 stream and only one fragment at a time.
-  await ytdlp(sourceUrl, {
-    output: outputFile,
-    format: "worst[ext=mp4]/worst",
-    mergeOutputFormat: "mp4",
-    downloadSections: `*${startSeconds}-${endSeconds}`,
-    forceKeyframesAtCuts: true,
-    ffmpegLocation: ffmpegPath,
-    noPlaylist: true,
-    quiet: true,
-    noWarnings: true,
-    concurrentFragments: 1,
-    retries: 1,
-    fragmentRetries: 1,
-    socketTimeout: 30
+  const startedAt = Date.now();
+  const duration = Math.max(1, Number(endSeconds) - Number(startSeconds));
+
+  console.log("AI clip download starting:", {
+    startSeconds,
+    endSeconds,
+    duration,
+    sourceUrl
   });
+
+  // Render free instances have very limited memory. Keep this path deliberately
+  // lightweight: use a single progressive MP4 stream, one fragment at a time,
+  // and let yt-dlp perform the section cut without forcing keyframes. The
+  // previous forceKeyframesAtCuts path could make ffmpeg consume enough memory
+  // to have the Render free worker restarted before the promise resolved.
+  try {
+    await ytdlp(sourceUrl, {
+      output: outputFile,
+      format: "worst[ext=mp4]/worst",
+      downloadSections: `*${startSeconds}-${endSeconds}`,
+      ffmpegLocation: ffmpegPath,
+      noPlaylist: true,
+      quiet: true,
+      noWarnings: true,
+      concurrentFragments: 1,
+      retries: 1,
+      fragmentRetries: 1,
+      socketTimeout: 30
+    });
+
+    const stat = await fs.stat(outputFile);
+    console.log("AI clip download completed:", {
+      bytes: stat.size,
+      elapsedMs: Date.now() - startedAt
+    });
+  } catch (error) {
+    console.error("AI clip download failed:", {
+      elapsedMs: Date.now() - startedAt,
+      error: error?.message || "Unknown yt-dlp error"
+    });
+    throw error;
+  }
 }
 
 export async function renderClip(clipId, db = supabase) {
