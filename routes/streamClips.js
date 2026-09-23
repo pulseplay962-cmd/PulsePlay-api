@@ -1,6 +1,6 @@
 import express from "express";
 import { requireAdmin } from "../middleware/adminAuth.js";
-import { syncRecentStreamVods, listStreamVods, createClipCandidate, renderClip, renderVerticalClip, queueVerticalClipRender, queueCaptionedVerticalClipRender, listClips, analyzeVodForClipCandidates, autoRenderTopClips } from "../services/ai/streamClipService.js";
+import { syncRecentStreamVods, listStreamVods, createClipCandidate, renderClip, renderVerticalClip, queueVerticalClipRender, queueCaptionedVerticalClipRender, listClips, analyzeVodForClipCandidates, autoRenderTopClips, archiveStreamClip, setStreamClipKeep, getClipCleanupPreview, cleanupStreamClips } from "../services/ai/streamClipService.js";
 
 const router = express.Router();
 
@@ -71,6 +71,22 @@ router.post("/:id/render-vertical", requireAdmin, async (req,res)=>{
   catch(error) { console.error("AI vertical clip render error:",error); res.status(500).json({success:false,error:error.message||"Unable to render vertical clip."}); }
 });
 
+router.get("/cleanup/preview", requireAdmin, async (req,res)=>{
+  try { const maxClips=Math.min(Math.max(Number(req.query.maxClips)||50,1),500); const ageDays=Math.min(Math.max(Number(req.query.ageDays)||60,1),3650); res.json({success:true,...await getClipCleanupPreview({maxClips,ageDays})}); }
+  catch(error) { res.status(500).json({success:false,error:error.message||"Unable to preview clip cleanup."}); }
+});
+router.post("/cleanup", requireAdmin, async (req,res)=>{
+  try { const maxClips=Math.min(Math.max(Number(req.body?.maxClips)||50,1),500); const ageDays=Math.min(Math.max(Number(req.body?.ageDays)||60,1),3650); res.json({success:true,...await cleanupStreamClips({maxClips,ageDays})}); }
+  catch(error) { res.status(500).json({success:false,error:error.message||"Unable to clean up clips."}); }
+});
+router.post("/:id/archive", requireAdmin, async (req,res)=>{
+  try { res.json({success:true,clip:await archiveStreamClip(req.params.id)}); }
+  catch(error) { res.status(500).json({success:false,error:error.message||"Unable to archive clip."}); }
+});
+router.post("/:id/keep", requireAdmin, async (req,res)=>{
+  try { res.json({success:true,clip:await setStreamClipKeep(req.params.id,req.body?.keep)}); }
+  catch(error) { res.status(500).json({success:false,error:error.message||"Unable to update clip protection."}); }
+});
 router.get("/clips", requireAdmin, async (req,res)=>{
   try { res.json({success:true,clips:await listClips(req.query.vodId||null,Math.min(Number(req.query.limit)||50,100))}); }
   catch(error) { console.error("AI stream clips error:",error); res.status(500).json({success:false,error:error.message||"Unable to load clips."}); }
