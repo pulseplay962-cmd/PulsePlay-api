@@ -158,13 +158,13 @@ async function downloadClip(sourceUrl, startSeconds, endSeconds, outputFile) {
       "-map", "0:v:0?",
       "-map", "0:a:0?",
       "-c:v", "libx264",
-      "-preset", "veryfast",
-      "-crf", "23",
+      "-preset", "ultrafast",
+      "-crf", "25",
       "-c:a", "aac",
       "-b:a", "128k",
       "-movflags", "+faststart",
       outputFile
-    ], { maxBuffer: 4194304 });
+    ], { maxBuffer: 4194304, timeout: 240000 });
 
     const stat = await fs.stat(outputFile);
     console.log("AI clip exact render completed:", {
