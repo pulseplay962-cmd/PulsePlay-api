@@ -115,44 +115,70 @@ async function downloadClip(sourceUrl, startSeconds, endSeconds, outputFile) {
   if (!ffmpegPath) throw new Error("FFmpeg is not available in this deployment.");
 
   const startedAt = Date.now();
-  const duration = Math.max(1, Number(endSeconds) - Number(startSeconds));
+  const start = Math.max(0, Number(startSeconds) || 0);
+  const duration = Math.max(1, (Number(endSeconds) || 0) - startSeconds);
 
-  console.log("AI clip download starting:", {
-    startSeconds,
+  console.log("AI clip exact render starting:", {
+    startSeconds: start,
     endSeconds,
     duration,
     sourceUrl
   });
 
-  // Render free instances have very limited memory. Keep this path deliberately
-  // lightweight: use a single progressive MP4 stream, one fragment at a time,
-  // and let yt-dlp perform the section cut without forcing keyframes. The
-  // previous forceKeyframesAtCuts path could make ffmpeg consume enough memory
-  // to have the Render free worker restarted before the promise resolved.
+  // Get a direct media URL first, then let FFmpeg seek to the exact timestamp.
+  // This avoids yt-dlp's section/keyframe behavior causing multiple clips to
+  // resolve to the same GOP/segment on Twitch VODs.
   try {
-    await ytdlp(sourceUrl, {
-      output: outputFile,
+    const mediaResult = await ytdlp(sourceUrl, {
+      getUrl: true,
       format: "worst[ext=mp4]/worst",
-      downloadSections: `*${startSeconds}-${endSeconds}`,
-      ffmpegLocation: ffmpegPath,
       noPlaylist: true,
       quiet: true,
       noWarnings: true,
-      concurrentFragments: 1,
-      retries: 1,
-      fragmentRetries: 1,
+      retries: 2,
+      fragmentRetries: 2,
       socketTimeout: 30
     });
 
+    const mediaUrl = String(mediaResult?.stdout || mediaResult || "")
+      .trim()
+      .split(/\r?\n/)
+      .filter(Boolean)
+      .pop();
+
+    if (!mediaUrl || !/^https?:\\/\\//i.test(mediaUrl)) {
+      throw new Error("yt-dlp did not return a usable direct media URL.");
+    }
+
+    await execFileAsync(ffmpegPath, [
+      "-y",
+      "-ss", String(start),
+      "-i", mediaUrl,
+      "-t", String(duration),
+      "-map", "0:v:0?",
+      "-map", "0:a:0?",
+      "-c:v", "libx264",
+      "-preset", "veryfast",
+      "-crf", "23",
+      "-c:a", "aac",
+      "-b:a", "128k",
+      "-movflags", "+faststart",
+      outputFile
+    ], { maxBuffer: 4194304 });
+
     const stat = await fs.stat(outputFile);
-    console.log("AI clip download completed:", {
+    console.log("AI clip exact render completed:", {
       bytes: stat.size,
-      elapsedMs: Date.now() - startedAt
+      elapsedMs: Date.now() - startedAt,
+      startSeconds: start,
+      duration
     });
   } catch (error) {
-    console.error("AI clip download failed:", {
+    console.error("AI clip exact render failed:", {
       elapsedMs: Date.now() - startedAt,
-      error: error?.message || "Unknown yt-dlp error"
+      startSeconds: start,
+      endSeconds,
+      error: error?.message || "Unknown render error"
     });
     throw error;
   }
