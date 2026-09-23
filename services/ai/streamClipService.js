@@ -146,7 +146,7 @@ async function downloadClip(sourceUrl, startSeconds, endSeconds, outputFile) {
       .filter(Boolean)
       .pop();
 
-    if (!mediaUrl || !/^https?:\\/\\//i.test(mediaUrl)) {
+    if (!mediaUrl || !/^https?:\/\//i.test(mediaUrl)) {
       throw new Error("yt-dlp did not return a usable direct media URL.");
     }
 
