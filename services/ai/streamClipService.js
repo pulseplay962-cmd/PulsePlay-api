@@ -631,8 +631,69 @@ export async function queueCaptionedVerticalClipRender(clipId, authorization = "
   }
 }
 
+
+function storagePathFromPublicUrl(value, bucket = process.env.AI_MEDIA_BUCKET || "ai-media") {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    const marker = "/object/public/" + bucket + "/";
+    const index = url.pathname.indexOf(marker);
+    if (index === -1) return null;
+    return decodeURIComponent(url.pathname.slice(index + marker.length));
+  } catch { return null; }
+}
+async function removeClipStorage(clip, db = supabase) {
+  const bucket = process.env.AI_MEDIA_BUCKET || "ai-media";
+  const paths = [clip.clip_url, clip.vertical_clip_url, clip.captioned_vertical_clip_url]
+    .map(value => storagePathFromPublicUrl(value, bucket)).filter(Boolean);
+  if (!paths.length) return { removed: [] };
+  const result = await db.storage.from(bucket).remove([...new Set(paths)]);
+  if (result.error) throw result.error;
+  return { removed: paths };
+}
+export async function archiveStreamClip(clipId, db = supabase) {
+  const { data: clip, error } = await db.from("ai_stream_clips").select("*").eq("id", clipId).single();
+  if (error || !clip) throw new Error("Clip not found.");
+  if (clip.keep) throw new Error("This clip is protected. Unmark Keep before archiving it.");
+  if (clip.status === "rendering") throw new Error("A clip currently rendering cannot be archived.");
+  await removeClipStorage(clip, db);
+  const { data: updated, error: updateError } = await db.from("ai_stream_clips").update({
+    status:"archived", archived_at:new Date().toISOString(), clip_url:null,
+    vertical_clip_url:null, captioned_vertical_clip_url:null, error:null
+  }).eq("id",clipId).select().single();
+  if (updateError) throw updateError;
+  return updated;
+}
+export async function setStreamClipKeep(clipId, keep, db = supabase) {
+  const { data, error } = await db.from("ai_stream_clips").update({keep:Boolean(keep)}).eq("id",clipId).select().single();
+  if (error || !data) throw new Error(error?.message || "Unable to update clip protection.");
+  return data;
+}
+export async function getClipCleanupPreview({maxClips=50,ageDays=60,db=supabase}={}) {
+  const { data: clips, error } = await db.from("ai_stream_clips")
+    .select("id,title,status,score,created_at,updated_at,keep,archived_at,clip_url,vertical_clip_url,captioned_vertical_clip_url")
+    .neq("status","archived").order("created_at",{ascending:false}).limit(500);
+  if (error) throw error;
+  const cutoff=Date.now()-Math.max(1,Number(ageDays)||60)*86400000;
+  const limit=Math.max(1,Number(maxClips)||50);
+  const eligible=(clips||[]).filter((clip,index)=>!clip.keep && clip.status!=="rendering" &&
+    (new Date(clip.created_at||0).getTime()<cutoff || index>=limit));
+  const unique=Array.from(new Map(eligible.map(clip=>[clip.id,clip])).values());
+  return {maxClips:limit,ageDays:Math.max(1,Number(ageDays)||60),totalActive:(clips||[]).length,
+    eligibleCount:unique.length,eligible:unique.map(c=>({id:c.id,title:c.title,status:c.status,score:c.score,created_at:c.created_at,keep:Boolean(c.keep)}))};
+}
+export async function cleanupStreamClips({maxClips=50,ageDays=60,db=supabase}={}) {
+  const preview=await getClipCleanupPreview({maxClips,ageDays,db});
+  const archived=[],errors=[];
+  for (const clip of preview.eligible) {
+    try { await archiveStreamClip(clip.id,db); archived.push(clip.id); }
+    catch(error) { errors.push({id:clip.id,error:error.message||"Unable to archive clip."}); }
+  }
+  return {...preview,archivedCount:archived.length,archived,errors};
+}
+
 export async function listClips(vodId=null, limit=50) {
-  let query = supabase.from("ai_stream_clips").select("*, ai_stream_vods(title,url,thumbnail_url)").order("created_at",{ascending:false}).limit(limit);
+  let query = supabase.from("ai_stream_clips").select("*, ai_stream_vods(title,url,thumbnail_url)").neq("status","archived").order("created_at",{ascending:false}).limit(limit);
   if (vodId) query = query.eq("vod_id",vodId);
   const { data,error } = await query;
   if (error) throw error;
