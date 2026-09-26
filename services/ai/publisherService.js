@@ -341,7 +341,11 @@ if(
 
                 item.hashtags || [],
 
+                source_url:
+                item.source_url || "",
 
+                source_name:
+                sourceName || "",
 
                 published_at:
 
