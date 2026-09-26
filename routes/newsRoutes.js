@@ -126,7 +126,19 @@ router.post(
 
                 const article = await generateArticle(topic);
 
-                if (!article?.title || !article?.body) {
+                // generateArticle() returns the single-article shape
+                // (title, article, facebookPost, imagePrompt, hashtags).
+                // Normalize it here to the queue shape (title, body,
+                // social_caption, image_prompt) used by AI News Refresh.
+                const normalizedArticle = {
+                    title: article?.title || "",
+                    body: article?.article || article?.body || "",
+                    social_caption: article?.facebookPost || article?.social_caption || "",
+                    image_prompt: article?.imagePrompt || article?.image_prompt || "",
+                    hashtags: Array.isArray(article?.hashtags) ? article.hashtags : []
+                };
+
+                if (!normalizedArticle.title || !normalizedArticle.body) {
                     console.warn(
                         "AI news article skipped because it was incomplete:",
                         source.title
@@ -144,9 +156,10 @@ router.post(
                             title: article.title,
                             content_type: "news",
                             category: "Gaming News & Updates",
-                            body: article.body,
-                            social_caption: article.social_caption || "",
-                            image_prompt: article.image_prompt || "",
+                            body: normalizedArticle.body,
+                            social_caption: normalizedArticle.social_caption,
+                            image_prompt: normalizedArticle.image_prompt,
+                            hashtags: normalizedArticle.hashtags,
                             image_url: article.image_url || "",
                             source_url: source.url,
                             source_name: source.source || "",
