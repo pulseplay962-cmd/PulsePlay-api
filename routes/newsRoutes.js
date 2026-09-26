@@ -33,6 +33,109 @@ const supabase = createClient(
     process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
+function normalizeNewsUrl(url = "") {
+    try {
+        const parsed = new URL(String(url).trim());
+        const removable = ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "fbclid", "gclid"];
+        removable.forEach(key => parsed.searchParams.delete(key));
+        parsed.hash = "";
+        return parsed.toString().replace(/\/$/, "");
+    } catch {
+        return String(url || "").trim().replace(/\/$/, "");
+    }
+}
+
+function normalizeNewsTitle(title = "") {
+    return String(title)
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+}
+
+function isSimilarTitle(title, existingTitles) {
+    const words = new Set(
+        normalizeNewsTitle(title)
+            .split(" ")
+            .filter(word => word.length > 2)
+    );
+
+    if (words.size < 5) return false;
+
+    for (const existing of existingTitles) {
+        const existingWords = new Set(
+            normalizeNewsTitle(existing)
+                .split(" ")
+                .filter(word => word.length > 2)
+        );
+
+        if (existingWords.size < 5) continue;
+
+        let overlap = 0;
+
+        for (const word of words) {
+            if (existingWords.has(word)) overlap++;
+        }
+
+        const similarity =
+            overlap / Math.max(words.size, existingWords.size);
+
+        if (similarity >= 0.88) return true;
+    }
+
+    return false;
+}
+
+function isUsableGeneratedArticle(article) {
+    const title = String(article?.title || "").trim();
+    const body = String(article?.body || "").trim();
+
+    if (title.length < 12 || body.length < 500) {
+        return false;
+    }
+
+    const blockedPhrases = [
+        "lorem ipsum",
+        "insert article",
+        "placeholder text",
+        "as an ai",
+        "i cannot verify"
+    ];
+
+    const lowerBody = body.toLowerCase();
+
+    return !blockedPhrases.some(
+        phrase => lowerBody.includes(phrase)
+    );
+}
+
+async function withRetry(operation, label, attempts = 2) {
+    let lastError;
+
+    for (let attempt = 1; attempt <= attempts; attempt++) {
+        try {
+            return await operation();
+        } catch (error) {
+            lastError = error;
+
+            console.warn(
+                "NEWS REFRESH " + label +
+                " attempt " + attempt + "/" + attempts +
+                " failed:",
+                error?.message || error
+            );
+
+            if (attempt < attempts) {
+                await new Promise(resolve =>
+                    setTimeout(resolve, 1500)
+                );
+            }
+        }
+    }
+
+    throw lastError;
+}
+
 // ==================================
 // Refresh AI Gaming News
 // ==================================
@@ -66,7 +169,7 @@ router.post(
                     .from("ai_content_queue")
                     .select("title, source_url")
                     .order("created_at", { ascending: false })
-                    .limit(250);
+                    .limit(2000);
 
             if (queueError) {
                 throw queueError;
@@ -74,24 +177,25 @@ router.post(
 
             const existingTitles = new Set(
                 (existingQueue || [])
-                    .map(item => String(item.title || "").toLowerCase().trim())
+                    .map(item => String(item.title || "").trim())
                     .filter(Boolean)
             );
 
             const existingSourceUrls = new Set(
                 (existingQueue || [])
-                    .map(item => String(item.source_url || "").trim())
+                    .map(item => normalizeNewsUrl(item.source_url))
                     .filter(Boolean)
             );
 
             const freshSources = research
                 .filter(source => {
-                    const title = String(source.title || "").toLowerCase().trim();
-                    const sourceUrl = String(source.url || "").trim();
+                    const title = String(source.title || "").trim();
+                    const sourceUrl = normalizeNewsUrl(source.url);
 
                     return (
                         title &&
                         !existingTitles.has(title) &&
+                        !isSimilarTitle(title, existingTitles) &&
                         sourceUrl &&
                         !existingSourceUrls.has(sourceUrl)
                     );
@@ -124,7 +228,21 @@ router.post(
                     `Source URL: ${source.url}`
                 ].join("\n\n");
 
-                const article = await generateArticle(topic);
+                let article;
+
+                try {
+                    article = await withRetry(
+                        () => generateArticle(topic),
+                        "article generation for " + source.title
+                    );
+                } catch (articleError) {
+                    console.error(
+                        "AI news article generation failed after retry:",
+                        source.title,
+                        articleError
+                    );
+                    continue;
+                }
 
                 // generateArticle() returns the single-article shape
                 // (title, article, facebookPost, imagePrompt, hashtags).
@@ -138,9 +256,9 @@ router.post(
                     hashtags: Array.isArray(article?.hashtags) ? article.hashtags : []
                 };
 
-                if (!normalizedArticle.title || !normalizedArticle.body) {
+                if (!isUsableGeneratedArticle(normalizedArticle)) {
                     console.warn(
-                        "AI news article skipped because it was incomplete:",
+                        "AI news article skipped by quality validation:",
                         source.title
                     );
                     continue;
@@ -161,7 +279,7 @@ router.post(
                             image_prompt: normalizedArticle.image_prompt,
                             hashtags: normalizedArticle.hashtags,
                             image_url: article.image_url || "",
-                            source_url: source.url,
+                            source_url: normalizeNewsUrl(source.url),
                             source_name: source.source || "",
                             research_source_index: research.indexOf(source),
                             status: "draft",
@@ -178,7 +296,10 @@ router.post(
                     continue;
                 }
 
-                let finalPost = inserted;\n\n                // Generate the editorial image automatically during refresh.\n                // If image generation fails, keep the article as a draft so one\n                // image failure never prevents the rest of the weekly refresh.\n                if (!inserted.image_url && normalizedArticle.image_prompt) {\n                    try {\n                        finalPost = await generateQueueImage(inserted);\n                    } catch (imageError) {\n                        console.error(\n                            "AI news image generation failed; keeping article draft:",\n                            imageError\n                        );\n                    }\n                }\n\n                posts.push(finalPost);
+                let finalPost = inserted;\n\n                // Generate the editorial image automatically during refresh.\n                // If image generation fails, keep the article as a draft so one\n                // image failure never prevents the rest of the weekly refresh.\n                if (!inserted.image_url && normalizedArticle.image_prompt) {\n                    try {\n                        finalPost = await withRetry(
+                            () => generateQueueImage(inserted),
+                            "image generation for " + inserted.title
+                        );\n                    } catch (imageError) {\n                        console.error(\n                            "AI news image generation failed; keeping article draft:",\n                            imageError\n                        );\n                    }\n                }\n\n                posts.push(finalPost);
             }
 
             return res.json({
