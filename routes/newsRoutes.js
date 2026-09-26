@@ -220,9 +220,12 @@ router.post(
                     break;
                 }
                 const topic = [
-                    "Write a current PulsePlay gaming news article based ONLY on the verified research below.",
+                    "Write a fresh PulsePlay gaming news article based ONLY on the verified research below.",
+                    "This weekly pipeline is for current video-game NEWS only. Do not turn the story into a gear guide, community poll, weekend picks, gaming tips, or evergreen advice article.",
+                    "Create a clean, natural PulsePlay headline that reads like a gaming news headline, not an RSS feed title, trailer label, or generic 'What to Look For' template.",
+                    "Preserve official game, studio, publisher, platform, and event names exactly when known.",
                     "Do not invent facts, dates, quotes, announcements, features, or statistics.",
-                    "Clearly distinguish confirmed information from speculation.",
+                    "Clearly distinguish confirmed information from speculation and omit speculation unless the source explicitly reports it.",
                     `Source: ${source.source || "Gaming news feed"}`,
                     `Published: ${source.published_at || "Unknown"}`,
                     `Headline: ${source.title}`,
@@ -273,7 +276,7 @@ router.post(
                     await supabase
                         .from("ai_content_queue")
                         .insert({
-                            title: article.title,
+                            title: normalizedArticle.title,
                             content_type: "news",
                             category: "Gaming News & Updates",
                             body: normalizedArticle.body,
