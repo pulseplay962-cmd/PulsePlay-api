@@ -243,6 +243,16 @@ if(
 
         const processedBody = applyAmazonAffiliate(item.body || "", process.env.AMAZON_AFFILIATE_TAG?.trim());
 
+        let sourceName = item.source_name || "";
+
+        if (!sourceName && item.source_url) {
+            try {
+                sourceName = new URL(item.source_url).hostname.replace(/^www\\./, "");
+            } catch {
+                sourceName = "Original Source";
+            }
+        }
+
         const {
 
             data:article,
