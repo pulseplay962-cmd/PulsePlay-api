@@ -5,7 +5,7 @@ import express from "express";
 import { createClient } from "@supabase/supabase-js";
 import { createSocialPost } from "../services/socialQueue.js";
 import { researchGamingNews } from "../services/ai/researchService.js";
-import { generateArticle } from "../services/ai/contentService.js";
+import { generateArticle, generateQueueImage } from "../services/ai/contentService.js";
 
 console.log("🔥 NEWS ROUTES FILE LOADED");
 
@@ -41,7 +41,7 @@ const supabase = createClient(
 // generates fresh PulsePlay news drafts,
 // and saves them to the AI content queue.
 //
-// This does NOT publish automatically.
+// This does NOT publish automatically.\n// Each fresh article also receives a stored AI-generated image so the weekly\n// refresh requires minimal manual work in AI Content Studio.
 // ==================================
 
 router.post(
@@ -110,7 +110,7 @@ router.post(
             const posts = [];
 
             for (const source of freshSources) {
-                if (posts.length >= 3) {
+                if (posts.length >= 5) {
                     break;
                 }
                 const topic = [
@@ -178,7 +178,7 @@ router.post(
                     continue;
                 }
 
-                posts.push(inserted);
+                let finalPost = inserted;\n\n                // Generate the editorial image automatically during refresh.\n                // If image generation fails, keep the article as a draft so one\n                // image failure never prevents the rest of the weekly refresh.\n                if (!inserted.image_url && normalizedArticle.image_prompt) {\n                    try {\n                        finalPost = await generateQueueImage(inserted);\n                    } catch (imageError) {\n                        console.error(\n                            "AI news image generation failed; keeping article draft:",\n                            imageError\n                        );\n                    }\n                }\n\n                posts.push(finalPost);
             }
 
             return res.json({
