@@ -4,6 +4,8 @@ dotenv.config();
 import express from "express";
 import { createClient } from "@supabase/supabase-js";
 import { createSocialPost } from "../services/socialQueue.js";
+import { researchGamingNews } from "../services/ai/researchService.js";
+import { generateArticle } from "../services/ai/contentService.js";
 
 console.log("🔥 NEWS ROUTES FILE LOADED");
 
@@ -29,6 +31,144 @@ console.log(
 const supabase = createClient(
     process.env.SUPABASE_URL,
     process.env.SUPABASE_SERVICE_ROLE_KEY
+);
+
+// ==================================
+// Refresh AI Gaming News
+// ==================================
+//
+// Researches current gaming RSS feeds,
+// generates fresh PulsePlay news drafts,
+// and saves them to the AI content queue.
+//
+// This does NOT publish automatically.
+// ==================================
+
+router.post(
+    "/refresh-ai",
+    async (req, res) => {
+        try {
+            console.log("=================================");
+            console.log("PULSEPLAY AI NEWS REFRESH");
+            console.log("=================================");
+
+            const research = await researchGamingNews();
+
+            if (!research.length) {
+                return res.status(502).json({
+                    success: false,
+                    error: "No current gaming news was returned by the research sources."
+                });
+            }
+
+            const { data: existingQueue, error: queueError } =
+                await supabase
+                    .from("ai_content_queue")
+                    .select("title")
+                    .order("created_at", { ascending: false })
+                    .limit(100);
+
+            if (queueError) {
+                throw queueError;
+            }
+
+            const existingTitles = new Set(
+                (existingQueue || [])
+                    .map(item => String(item.title || "").toLowerCase().trim())
+                    .filter(Boolean)
+            );
+
+            const freshSources = research
+                .filter(source => {
+                    const title = String(source.title || "").toLowerCase().trim();
+                    return title && !existingTitles.has(title);
+                })
+                .slice(0, 3);
+
+            if (!freshSources.length) {
+                return res.json({
+                    success: true,
+                    created: 0,
+                    message: "No new gaming news was found that is not already in the AI queue.",
+                    posts: []
+                });
+            }
+
+            const posts = [];
+
+            for (const source of freshSources) {
+                const topic = [
+                    "Write a current PulsePlay gaming news article based ONLY on the verified research below.",
+                    "Do not invent facts, dates, quotes, announcements, features, or statistics.",
+                    "Clearly distinguish confirmed information from speculation.",
+                    `Source: ${source.source || "Gaming news feed"}`,
+                    `Published: ${source.published_at || "Unknown"}`,
+                    `Headline: ${source.title}`,
+                    `Summary: ${source.summary || "No summary provided."}`,
+                    `Source URL: ${source.url}`
+                ].join("\n\n");
+
+                const article = await generateArticle(topic);
+
+                if (!article?.title || !article?.body) {
+                    console.warn(
+                        "AI news article skipped because it was incomplete:",
+                        source.title
+                    );
+                    continue;
+                }
+
+                const scheduledDate =
+                    new Date().toISOString().split("T")[0];
+
+                const { data: inserted, error: insertError } =
+                    await supabase
+                        .from("ai_content_queue")
+                        .insert({
+                            title: article.title,
+                            content_type: "news",
+                            category: "Gaming News & Updates",
+                            body: article.body,
+                            social_caption: article.social_caption || "",
+                            image_prompt: article.image_prompt || "",
+                            image_url: article.image_url || "",
+                            status: "draft",
+                            scheduled_date: scheduledDate
+                        })
+                        .select()
+                        .single();
+
+                if (insertError) {
+                    console.error(
+                        "AI news queue insert failed:",
+                        insertError
+                    );
+                    continue;
+                }
+
+                posts.push(inserted);
+            }
+
+            return res.json({
+                success: true,
+                created: posts.length,
+                posts
+            });
+
+        } catch (error) {
+            console.error(
+                "AI news refresh error:",
+                error
+            );
+
+            return res.status(500).json({
+                success: false,
+                error:
+                    error.message ||
+                    "Unable to refresh AI gaming news."
+            });
+        }
+    }
 );
 
 // ==================================
