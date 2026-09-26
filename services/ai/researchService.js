@@ -42,7 +42,7 @@ const NEWS_SOURCES = [
 ];
 
 const ARTICLES_PER_SOURCE = 75;
-const MAX_ARTICLE_AGE_DAYS = 14;
+const MAX_ARTICLE_AGE_DAYS = 7;
 const FETCH_TIMEOUT_MS = 15000;
 
 function decodeHtml(text = "") {
