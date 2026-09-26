@@ -228,9 +228,7 @@ router.post(
                     `Headline: ${source.title}`,
                     `Summary: ${source.summary || "No summary provided."}`,
                     `Source URL: ${source.url}`
-                ].join("
-
-");
+                ].join("\n\n");
 
                 let article;
 
@@ -412,9 +410,7 @@ router.post(
                     `Read more: https://pulseplay.online/news/${data.slug}`
                 ]
                     .filter(Boolean)
-                    .join("
-
-");
+                    .join("\n\n");
 
                 await createSocialPost({
                     newsId: data.id,
