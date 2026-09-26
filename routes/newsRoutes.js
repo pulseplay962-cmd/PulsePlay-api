@@ -144,7 +144,9 @@ async function withRetry(operation, label, attempts = 2) {
 // generates fresh PulsePlay news drafts,
 // and saves them to the AI content queue.
 //
-// This does NOT publish automatically.\n// Each fresh article also receives a stored AI-generated image so the weekly\n// refresh requires minimal manual work in AI Content Studio.
+// This does NOT publish automatically.
+// Each fresh article also receives a stored AI-generated image so the weekly
+// refresh requires minimal manual work in AI Content Studio.
 // ==================================
 
 router.post(
@@ -226,7 +228,9 @@ router.post(
                     `Headline: ${source.title}`,
                     `Summary: ${source.summary || "No summary provided."}`,
                     `Source URL: ${source.url}`
-                ].join("\n\n");
+                ].join("
+
+");
 
                 let article;
 
@@ -296,10 +300,26 @@ router.post(
                     continue;
                 }
 
-                let finalPost = inserted;\n\n                // Generate the editorial image automatically during refresh.\n                // If image generation fails, keep the article as a draft so one\n                // image failure never prevents the rest of the weekly refresh.\n                if (!inserted.image_url && normalizedArticle.image_prompt) {\n                    try {\n                        finalPost = await withRetry(
+                let finalPost = inserted;
+
+                // Generate the editorial image automatically during refresh.
+                // If image generation fails, keep the article as a draft so one
+                // image failure never prevents the rest of the weekly refresh.
+                if (!inserted.image_url && normalizedArticle.image_prompt) {
+                    try {
+                        finalPost = await withRetry(
                             () => generateQueueImage(inserted),
                             "image generation for " + inserted.title
-                        );\n                    } catch (imageError) {\n                        console.error(\n                            "AI news image generation failed; keeping article draft:",\n                            imageError\n                        );\n                    }\n                }\n\n                posts.push(finalPost);
+                        );
+                    } catch (imageError) {
+                        console.error(
+                            "AI news image generation failed; keeping article draft:",
+                            imageError
+                        );
+                    }
+                }
+
+                posts.push(finalPost);
             }
 
             return res.json({
@@ -392,7 +412,9 @@ router.post(
                     `Read more: https://pulseplay.online/news/${data.slug}`
                 ]
                     .filter(Boolean)
-                    .join("\n\n");
+                    .join("
+
+");
 
                 await createSocialPost({
                     newsId: data.id,
