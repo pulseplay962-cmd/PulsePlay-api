@@ -149,6 +149,7 @@ router.post(
                             image_prompt: article.image_prompt || "",
                             image_url: article.image_url || "",
                             source_url: source.url,
+                            source_name: source.source || "",
                             research_source_index: research.indexOf(source),
                             status: "draft",
                             scheduled_date: scheduledDate
