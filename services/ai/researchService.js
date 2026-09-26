@@ -42,6 +42,8 @@ const NEWS_SOURCES = [
 ];
 
 const ARTICLES_PER_SOURCE = 75;
+const MAX_ARTICLE_AGE_DAYS = 14;
+const FETCH_TIMEOUT_MS = 15000;
 
 function decodeHtml(text = "") {
 
@@ -82,8 +84,62 @@ function getItems(xml) {
     return (
         xml.match(
             /<item[\s\S]*?<\/item>/gi
-        ) || []
+        ) ||
+        xml.match(
+            /<entry[\s\S]*?<\/entry>/gi
+        ) ||
+        []
     );
+}
+
+function getLink(item) {
+
+    const hrefMatch = item.match(
+        /<link[^>]+href=["']([^"']+)["']/i
+    );
+
+    if (hrefMatch?.[1]) {
+        return normalizeUrl(hrefMatch[1]);
+    }
+
+    return normalizeUrl(
+        getTag(item, "link")
+    );
+}
+
+function getPublishedDate(item) {
+
+    return (
+        getTag(item, "pubDate") ||
+        getTag(item, "published") ||
+        getTag(item, "updated")
+    );
+}
+
+function isFreshArticle(article) {
+
+    if (!article.published_at) {
+        return true;
+    }
+
+    const publishedTime =
+        Date.parse(article.published_at);
+
+    if (Number.isNaN(publishedTime)) {
+        return true;
+    }
+
+    const ageMs =
+        Date.now() - publishedTime;
+
+    const maxAgeMs =
+        MAX_ARTICLE_AGE_DAYS *
+        24 *
+        60 *
+        60 *
+        1000;
+
+    return ageMs >= 0 && ageMs <= maxAgeMs;
 }
 
 function normalizeUrl(url = "") {
@@ -101,16 +157,32 @@ async function fetchSource(source) {
             `RESEARCH SOURCE: ${source.name}`
         );
 
-        const response =
-            await fetch(
-                source.url,
-                {
-                    headers: {
-                        "User-Agent":
-                            "PulsePlay-PulseAI/1.0"
-                    }
-                }
+        const controller =
+            new AbortController();
+
+        const timeout =
+            setTimeout(
+                () => controller.abort(),
+                FETCH_TIMEOUT_MS
             );
+
+        let response;
+
+        try {
+            response =
+                await fetch(
+                    source.url,
+                    {
+                        headers: {
+                            "User-Agent":
+                                "PulsePlay-PulseAI/1.0"
+                        },
+                        signal: controller.signal
+                    }
+                );
+        } finally {
+            clearTimeout(timeout);
+        }
 
         if (!response.ok) {
 
@@ -144,18 +216,10 @@ async function fetchSource(source) {
                         ),
 
                     url:
-                        normalizeUrl(
-                            getTag(
-                                item,
-                                "link"
-                            )
-                        ),
+                        getLink(item),
 
                     published_at:
-                        getTag(
-                            item,
-                            "pubDate"
-                        ),
+                        getPublishedDate(item),
 
                     summary:
                         getTag(
@@ -166,7 +230,8 @@ async function fetchSource(source) {
                 }))
                 .filter(item =>
                     item.title &&
-                    item.url
+                    item.url &&
+                    isFreshArticle(item)
                 );
 
         console.log(
@@ -193,7 +258,7 @@ function deduplicateArticles(articles) {
     return articles.filter(article => {
 
         const key =
-            article.url ||
+            normalizeUrl(article.url) ||
             article.title
                 .toLowerCase()
                 .trim();
