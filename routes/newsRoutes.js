@@ -64,9 +64,9 @@ router.post(
             const { data: existingQueue, error: queueError } =
                 await supabase
                     .from("ai_content_queue")
-                    .select("title")
+                    .select("title, source_url")
                     .order("created_at", { ascending: false })
-                    .limit(100);
+                    .limit(250);
 
             if (queueError) {
                 throw queueError;
@@ -78,12 +78,25 @@ router.post(
                     .filter(Boolean)
             );
 
+            const existingSourceUrls = new Set(
+                (existingQueue || [])
+                    .map(item => String(item.source_url || "").trim())
+                    .filter(Boolean)
+            );
+
             const freshSources = research
                 .filter(source => {
                     const title = String(source.title || "").toLowerCase().trim();
-                    return title && !existingTitles.has(title);
+                    const sourceUrl = String(source.url || "").trim();
+
+                    return (
+                        title &&
+                        !existingTitles.has(title) &&
+                        sourceUrl &&
+                        !existingSourceUrls.has(sourceUrl)
+                    );
                 })
-                .slice(0, 3);
+                .slice(0, 12);
 
             if (!freshSources.length) {
                 return res.json({
@@ -97,6 +110,9 @@ router.post(
             const posts = [];
 
             for (const source of freshSources) {
+                if (posts.length >= 3) {
+                    break;
+                }
                 const topic = [
                     "Write a current PulsePlay gaming news article based ONLY on the verified research below.",
                     "Do not invent facts, dates, quotes, announcements, features, or statistics.",
@@ -132,6 +148,8 @@ router.post(
                             social_caption: article.social_caption || "",
                             image_prompt: article.image_prompt || "",
                             image_url: article.image_url || "",
+                            source_url: source.url,
+                            research_source_index: research.indexOf(source),
                             status: "draft",
                             scheduled_date: scheduledDate
                         })
@@ -152,6 +170,12 @@ router.post(
             return res.json({
                 success: true,
                 created: posts.length,
+                researched: research.length,
+                candidates: freshSources.length,
+                message:
+                    posts.length > 0
+                        ? `Created ${posts.length} fresh gaming news draft(s).`
+                        : "Fresh gaming sources were found, but the AI could not produce complete articles from the available candidates.",
                 posts
             });
 
