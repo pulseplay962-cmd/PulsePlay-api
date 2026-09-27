@@ -11,22 +11,12 @@ console.log("🔥 NEWS ROUTES FILE LOADED");
 
 const router = express.Router();
 
-router.get(
-    "/test",
-    (req, res) => {
-        console.log("🔥 NEWS TEST ROUTE HIT");
+router.get("/test", (req, res) => {
+    console.log("🔥 NEWS TEST ROUTE HIT");
+    res.json({ success: true, message: "News route is working" });
+});
 
-        res.json({
-            success: true,
-            message: "News route is working"
-        });
-    }
-);
-
-console.log(
-    "NEWS ROUTE ENV CHECK:",
-    process.env.SUPABASE_URL
-);
+console.log("NEWS ROUTE ENV CHECK:", process.env.SUPABASE_URL);
 
 const supabase = createClient(
     process.env.SUPABASE_URL,
@@ -36,8 +26,8 @@ const supabase = createClient(
 function normalizeNewsUrl(url = "") {
     try {
         const parsed = new URL(String(url).trim());
-        const removable = ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "fbclid", "gclid"];
-        removable.forEach(key => parsed.searchParams.delete(key));
+        ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "fbclid", "gclid"]
+            .forEach(key => parsed.searchParams.delete(key));
         parsed.hash = "";
         return parsed.toString().replace(/\/$/, "");
     } catch {
@@ -54,33 +44,21 @@ function normalizeNewsTitle(title = "") {
 }
 
 function isSimilarTitle(title, existingTitles) {
-    const words = new Set(
-        normalizeNewsTitle(title)
-            .split(" ")
-            .filter(word => word.length > 2)
-    );
-
+    const words = new Set(normalizeNewsTitle(title).split(" ").filter(word => word.length > 2));
     if (words.size < 5) return false;
 
     for (const existing of existingTitles) {
-        const existingWords = new Set(
-            normalizeNewsTitle(existing)
-                .split(" ")
-                .filter(word => word.length > 2)
-        );
-
+        const existingWords = new Set(normalizeNewsTitle(existing).split(" ").filter(word => word.length > 2));
         if (existingWords.size < 5) continue;
 
         let overlap = 0;
-
         for (const word of words) {
             if (existingWords.has(word)) overlap++;
         }
 
-        const similarity =
-            overlap / Math.max(words.size, existingWords.size);
-
-        if (similarity >= 0.88) return true;
+        if (overlap / Math.max(words.size, existingWords.size) >= 0.88) {
+            return true;
+        }
     }
 
     return false;
@@ -90,9 +68,7 @@ function isUsableGeneratedArticle(article) {
     const title = String(article?.title || "").trim();
     const body = String(article?.body || "").trim();
 
-    if (title.length < 12 || body.length < 500) {
-        return false;
-    }
+    if (title.length < 12 || body.length < 500) return false;
 
     const blockedPhrases = [
         "lorem ipsum",
@@ -103,10 +79,7 @@ function isUsableGeneratedArticle(article) {
     ];
 
     const lowerBody = body.toLowerCase();
-
-    return !blockedPhrases.some(
-        phrase => lowerBody.includes(phrase)
-    );
+    return !blockedPhrases.some(phrase => lowerBody.includes(phrase));
 }
 
 async function withRetry(operation, label, attempts = 2) {
@@ -117,18 +90,14 @@ async function withRetry(operation, label, attempts = 2) {
             return await operation();
         } catch (error) {
             lastError = error;
-
             console.warn(
                 "NEWS REFRESH " + label +
-                " attempt " + attempt + "/" + attempts +
-                " failed:",
+                " attempt " + attempt + "/" + attempts + " failed:",
                 error?.message || error
             );
 
             if (attempt < attempts) {
-                await new Promise(resolve =>
-                    setTimeout(resolve, 1500)
-                );
+                await new Promise(resolve => setTimeout(resolve, 1500));
             }
         }
     }
@@ -136,320 +105,315 @@ async function withRetry(operation, label, attempts = 2) {
     throw lastError;
 }
 
-// ==================================
-// Refresh AI Gaming News
-// ==================================
-//
-// Researches current gaming RSS feeds,
-// generates fresh PulsePlay news drafts,
-// and saves them to the AI content queue.
-//
-// This does NOT publish automatically.
-// Each fresh article also receives a stored AI-generated image so the weekly
-// refresh requires minimal manual work in AI Content Studio.
-// ==================================
+function selectWeeklyCandidates(research, existingTitles, existingSourceUrls) {
+    const fresh = research.filter(source => {
+        const title = String(source.title || "").trim();
+        const sourceUrl = normalizeNewsUrl(source.url);
 
-router.post(
-    "/refresh-ai",
-    async (req, res) => {
-        try {
-            console.log("=================================");
-            console.log("PULSEPLAY AI NEWS REFRESH");
-            console.log("=================================");
+        return (
+            title &&
+            sourceUrl &&
+            !existingTitles.has(title) &&
+            !isSimilarTitle(title, existingTitles) &&
+            !existingSourceUrls.has(sourceUrl)
+        );
+    });
 
-            const research = await researchGamingNews();
+    const gaming = fresh.filter(item => item.source_type === "gaming");
+    const hardware = fresh.filter(item => item.source_type === "hardware");
 
-            if (!research.length) {
-                return res.status(502).json({
-                    success: false,
-                    error: "No current gaming news was returned by the research sources."
-                });
+    // Target a balanced weekly batch: 3 gaming stories + 2 hardware/gear stories.
+    // If one lane has fewer valid stories, fill the remaining slots from the other.
+    const selected = [
+        ...gaming.slice(0, 3),
+        ...hardware.slice(0, 2)
+    ];
+
+    if (selected.length < 5) {
+        const selectedUrls = new Set(selected.map(item => normalizeNewsUrl(item.url)));
+        for (const item of fresh) {
+            if (selected.length >= 5) break;
+            const url = normalizeNewsUrl(item.url);
+            if (!selectedUrls.has(url)) {
+                selected.push(item);
+                selectedUrls.add(url);
             }
-
-            const { data: existingQueue, error: queueError } =
-                await supabase
-                    .from("ai_content_queue")
-                    .select("title, source_url")
-                    .order("created_at", { ascending: false })
-                    .limit(2000);
-
-            if (queueError) {
-                throw queueError;
-            }
-
-            const existingTitles = new Set(
-                (existingQueue || [])
-                    .map(item => String(item.title || "").trim())
-                    .filter(Boolean)
-            );
-
-            const existingSourceUrls = new Set(
-                (existingQueue || [])
-                    .map(item => normalizeNewsUrl(item.source_url))
-                    .filter(Boolean)
-            );
-
-            const freshSources = research
-                .filter(source => {
-                    const title = String(source.title || "").trim();
-                    const sourceUrl = normalizeNewsUrl(source.url);
-
-                    return (
-                        title &&
-                        !existingTitles.has(title) &&
-                        !isSimilarTitle(title, existingTitles) &&
-                        sourceUrl &&
-                        !existingSourceUrls.has(sourceUrl)
-                    );
-                })
-                .slice(0, 12);
-
-            if (!freshSources.length) {
-                return res.json({
-                    success: true,
-                    created: 0,
-                    message: "No new gaming news was found that is not already in the AI queue.",
-                    posts: []
-                });
-            }
-
-            const posts = [];
-
-            for (const source of freshSources) {
-                if (posts.length >= 5) {
-                    break;
-                }
-                const topic = [
-                    "Write a fresh PulsePlay gaming news article based ONLY on the verified research below.",
-                    "This weekly pipeline is for current video-game NEWS only. Do not turn the story into a gear guide, community poll, weekend picks, gaming tips, or evergreen advice article.",
-                    "Create a clean, natural PulsePlay headline that reads like a gaming news headline, not an RSS feed title, trailer label, or generic 'What to Look For' template.",
-                    "Preserve official game, studio, publisher, platform, and event names exactly when known.",
-                    "Do not invent facts, dates, quotes, announcements, features, or statistics.",
-                    "Clearly distinguish confirmed information from speculation and omit speculation unless the source explicitly reports it.",
-                    `Source: ${source.source || "Gaming news feed"}`,
-                    `Published: ${source.published_at || "Unknown"}`,
-                    `Headline: ${source.title}`,
-                    `Summary: ${source.summary || "No summary provided."}`,
-                    `Source URL: ${source.url}`
-                ].join("\n\n");
-
-                let article;
-
-                try {
-                    article = await withRetry(
-                        () => generateArticle(topic),
-                        "article generation for " + source.title
-                    );
-                } catch (articleError) {
-                    console.error(
-                        "AI news article generation failed after retry:",
-                        source.title,
-                        articleError
-                    );
-                    continue;
-                }
-
-                // generateArticle() returns the single-article shape
-                // (title, article, facebookPost, imagePrompt, hashtags).
-                // Normalize it here to the queue shape (title, body,
-                // social_caption, image_prompt) used by AI News Refresh.
-                const normalizedArticle = {
-                    title: article?.title || "",
-                    body: article?.article || article?.body || "",
-                    social_caption: article?.facebookPost || article?.social_caption || "",
-                    image_prompt: article?.imagePrompt || article?.image_prompt || "",
-                    hashtags: Array.isArray(article?.hashtags) ? article.hashtags : []
-                };
-
-                if (!isUsableGeneratedArticle(normalizedArticle)) {
-                    console.warn(
-                        "AI news article skipped by quality validation:",
-                        source.title
-                    );
-                    continue;
-                }
-
-                const scheduledDate =
-                    new Date().toISOString().split("T")[0];
-
-                const { data: inserted, error: insertError } =
-                    await supabase
-                        .from("ai_content_queue")
-                        .insert({
-                            title: normalizedArticle.title,
-                            content_type: "news",
-                            category: "Gaming News & Updates",
-                            body: normalizedArticle.body,
-                            social_caption: normalizedArticle.social_caption,
-                            image_prompt: normalizedArticle.image_prompt,
-                            hashtags: normalizedArticle.hashtags,
-                            image_url: article.image_url || "",
-                            source_url: normalizeNewsUrl(source.url),
-                            source_name: source.source || "",
-                            research_source_index: research.indexOf(source),
-                            status: "draft",
-                            scheduled_date: scheduledDate
-                        })
-                        .select()
-                        .single();
-
-                if (insertError) {
-                    console.error(
-                        "AI news queue insert failed:",
-                        insertError
-                    );
-                    continue;
-                }
-
-                let finalPost = inserted;
-
-                // Generate the editorial image automatically during refresh.
-                // If image generation fails, keep the article as a draft so one
-                // image failure never prevents the rest of the weekly refresh.
-                if (!inserted.image_url && normalizedArticle.image_prompt) {
-                    try {
-                        finalPost = await withRetry(
-                            () => generateQueueImage(inserted),
-                            "image generation for " + inserted.title
-                        );
-                    } catch (imageError) {
-                        console.error(
-                            "AI news image generation failed; keeping article draft:",
-                            imageError
-                        );
-                    }
-                }
-
-                posts.push(finalPost);
-            }
-
-            return res.json({
-                success: true,
-                created: posts.length,
-                researched: research.length,
-                candidates: freshSources.length,
-                message:
-                    posts.length > 0
-                        ? `Created ${posts.length} fresh gaming news draft(s).`
-                        : "Fresh gaming sources were found, but the AI could not produce complete articles from the available candidates.",
-                posts
-            });
-
-        } catch (error) {
-            console.error(
-                "AI news refresh error:",
-                error
-            );
-
-            return res.status(500).json({
-                success: false,
-                error:
-                    error.message ||
-                    "Unable to refresh AI gaming news."
-            });
         }
     }
-);
+
+    return {
+        selected,
+        gamingAvailable: gaming.length,
+        hardwareAvailable: hardware.length
+    };
+}
+
+// ==================================
+// Refresh AI Gaming + Hardware News
+// ==================================
+// Weekly pipeline:
+//   Research -> freshness -> dedupe -> 3 gaming + 2 hardware candidates
+//   -> AI article -> quality gate -> original AI image -> draft queue.
+// Nothing is published automatically.
+// ==================================
+
+router.post("/refresh-ai", async (req, res) => {
+    try {
+        console.log("=================================");
+        console.log("PULSEPLAY AI GAMING + HARDWARE REFRESH");
+        console.log("=================================");
+
+        const research = await researchGamingNews();
+
+        if (!research.length) {
+            return res.status(502).json({
+                success: false,
+                error: "No current gaming or hardware news was returned by the research sources."
+            });
+        }
+
+        const { data: existingQueue, error: queueError } = await supabase
+            .from("ai_content_queue")
+            .select("title, source_url")
+            .order("created_at", { ascending: false })
+            .limit(2000);
+
+        if (queueError) throw queueError;
+
+        const existingTitles = new Set(
+            (existingQueue || [])
+                .map(item => String(item.title || "").trim())
+                .filter(Boolean)
+        );
+
+        const existingSourceUrls = new Set(
+            (existingQueue || [])
+                .map(item => normalizeNewsUrl(item.source_url))
+                .filter(Boolean)
+        );
+
+        const { selected: freshSources, gamingAvailable, hardwareAvailable } =
+            selectWeeklyCandidates(research, existingTitles, existingSourceUrls);
+
+        if (!freshSources.length) {
+            return res.json({
+                success: true,
+                created: 0,
+                researched: research.length,
+                gaming_available: gamingAvailable,
+                hardware_available: hardwareAvailable,
+                message: "No new gaming or hardware news was found that is not already in the AI queue.",
+                posts: []
+            });
+        }
+
+        const posts = [];
+
+        for (const source of freshSources) {
+            const lane = source.source_type === "hardware" ? "hardware" : "gaming";
+            const topic = [
+                "Write a fresh PulsePlay news article based ONLY on the verified research below.",
+                lane === "hardware"
+                    ? "This is a CURRENT GAMING HARDWARE / ACCESSORIES TREND story. Focus on meaningful developments involving GPUs, CPUs, gaming PCs, laptops, monitors, keyboards, mice, headsets, microphones, streaming gear, controllers, storage, networking, gaming accessories, launches, announcements, technology changes, pricing/availability developments, or notable industry trends. Do not turn it into a generic buying guide, product ranking, review, poll, or evergreen tips article."
+                    : "This is a CURRENT VIDEO-GAME NEWS story. Focus on announcements, releases, delays, updates, expansions, platforms, studios, publishers, events, industry developments, or other timely gaming news. Do not turn it into a gear guide, poll, weekend picks, gaming tips, or evergreen advice article.",
+                "Create a clean, natural PulsePlay headline that reads like a real news headline. Do not copy an RSS headline verbatim and do not use generic templates such as 'What to Look For' unless the verified source itself genuinely requires that wording.",
+                "Preserve official game, hardware, studio, publisher, manufacturer, product, platform, and event names exactly when known.",
+                "Do not invent facts, dates, prices, quotes, specifications, announcements, features, benchmarks, or statistics.",
+                "Clearly distinguish confirmed information from speculation and omit unsupported speculation.",
+                "If the source reports a claim that is not independently confirmed, attribute it clearly rather than presenting it as established fact.",
+                `Content lane: ${lane}`,
+                `Source: ${source.source || "Gaming/technology news feed"}`,
+                `Published: ${source.published_at || "Unknown"}`,
+                `Headline: ${source.title}`,
+                `Summary: ${source.summary || "No summary provided."}`,
+                `Source URL: ${source.url}`
+            ].join("\n\n");
+
+            let article;
+
+            try {
+                article = await withRetry(
+                    () => generateArticle(topic),
+                    "article generation for " + source.title
+                );
+            } catch (articleError) {
+                console.error(
+                    "AI news article generation failed after retry:",
+                    source.title,
+                    articleError
+                );
+                continue;
+            }
+
+            const normalizedArticle = {
+                title: article?.title || "",
+                body: article?.article || article?.body || "",
+                social_caption: article?.facebookPost || article?.social_caption || "",
+                image_prompt: article?.imagePrompt || article?.image_prompt || "",
+                hashtags: Array.isArray(article?.hashtags) ? article.hashtags : []
+            };
+
+            if (!isUsableGeneratedArticle(normalizedArticle)) {
+                console.warn("AI news article skipped by quality validation:", source.title);
+                continue;
+            }
+
+            const scheduledDate = new Date().toISOString().split("T")[0];
+
+            const { data: inserted, error: insertError } = await supabase
+                .from("ai_content_queue")
+                .insert({
+                    title: normalizedArticle.title,
+                    content_type: "news",
+                    category: lane === "hardware" ? "Gaming Hardware & Gear" : "Gaming News & Updates",
+                    body: normalizedArticle.body,
+                    social_caption: normalizedArticle.social_caption,
+                    image_prompt: normalizedArticle.image_prompt,
+                    hashtags: normalizedArticle.hashtags,
+                    image_url: article.image_url || "",
+                    source_url: normalizeNewsUrl(source.url),
+                    source_name: source.source || "",
+                    research_source_index: research.indexOf(source),
+                    status: "draft",
+                    scheduled_date: scheduledDate
+                })
+                .select()
+                .single();
+
+            if (insertError) {
+                console.error("AI news queue insert failed:", insertError);
+                continue;
+            }
+
+            let finalPost = inserted;
+
+            if (!inserted.image_url && normalizedArticle.image_prompt) {
+                try {
+                    finalPost = await withRetry(
+                        () => generateQueueImage(inserted),
+                        "image generation for " + inserted.title
+                    );
+                } catch (imageError) {
+                    console.error(
+                        "AI news image generation failed; keeping article draft:",
+                        imageError
+                    );
+                }
+            }
+
+            posts.push({
+                ...finalPost,
+                content_lane: lane
+            });
+        }
+
+        return res.json({
+            success: true,
+            created: posts.length,
+            researched: research.length,
+            candidates: freshSources.length,
+            gaming_available: gamingAvailable,
+            hardware_available: hardwareAvailable,
+            message:
+                posts.length > 0
+                    ? `Created ${posts.length} fresh gaming/hardware news draft(s).`
+                    : "Fresh sources were found, but the AI could not produce complete articles from the available candidates.",
+            posts
+        });
+    } catch (error) {
+        console.error("AI news refresh error:", error);
+
+        return res.status(500).json({
+            success: false,
+            error: error.message || "Unable to refresh AI gaming and hardware news."
+        });
+    }
+});
 
 // ==================================
 // Publish Article From PulseAI
 // ==================================
 
-router.post(
-    "/publish",
-    async (req, res) => {
-        try {
-            const {
-                title,
-                slug,
-                excerpt,
-                content,
-                image,
-                category,
-                author
-            } = req.body;
+router.post("/publish", async (req, res) => {
+    try {
+        const {
+            title,
+            slug,
+            excerpt,
+            content,
+            image,
+            category,
+            author
+        } = req.body;
 
-            if (!title || !content) {
-                return res.status(400).json({
-                    success: false,
-                    error: "Title and content are required."
-                });
-            }
-
-            const { data, error } = await supabase
-                .from("news")
-                .insert([
-                    {
-                        title,
-                        slug,
-                        excerpt,
-                        content,
-                        image: image || "",
-                        category: category || "Gaming",
-                        author: author || "PulseAI",
-                        published: true,
-                        status: "published"
-                    }
-                ])
-                .select()
-                .single();
-
-            if (error) {
-                console.error(
-                    "Publish insert error:",
-                    error
-                );
-
-                return res.status(500).json({
-                    success: false,
-                    error: error.message
-                });
-            }
-
-            try {
-                const socialText = [
-                    title,
-                    excerpt || "",
-                    `Read more: https://pulseplay.online/news/${data.slug}`
-                ]
-                    .filter(Boolean)
-                    .join("\n\n");
-
-                await createSocialPost({
-                    newsId: data.id,
-                    platform: "facebook",
-                    postText: socialText,
-                    imageUrl: image || "",
-                    hashtags: [],
-                    scheduledAt: null
-                });
-            } catch (socialError) {
-                console.error(
-                    "Facebook social post creation failed:",
-                    socialError
-                );
-            }
-
-            return res.json({
-                success: true,
-                article: data
-            });
-        } catch (error) {
-            console.error(
-                "Publish route error:",
-                error
-            );
-
-            return res.status(500).json({
+        if (!title || !content) {
+            return res.status(400).json({
                 success: false,
-                error: "Unable to publish article."
+                error: "Title and content are required."
             });
         }
-    }
-);
 
-console.log(
-    "NEWS ROUTER READY"
-);
+        const { data, error } = await supabase
+            .from("news")
+            .insert([
+                {
+                    title,
+                    slug,
+                    excerpt,
+                    content,
+                    image: image || "",
+                    category: category || "Gaming",
+                    author: author || "PulseAI",
+                    published: true,
+                    status: "published"
+                }
+            ])
+            .select()
+            .single();
+
+        if (error) {
+            console.error("Publish insert error:", error);
+            return res.status(500).json({
+                success: false,
+                error: error.message
+            });
+        }
+
+        try {
+            const socialText = [
+                title,
+                excerpt || "",
+                `Read more: https://pulseplay.online/news/${data.slug}`
+            ]
+                .filter(Boolean)
+                .join("\n\n");
+
+            await createSocialPost({
+                newsId: data.id,
+                platform: "facebook",
+                postText: socialText,
+                imageUrl: image || "",
+                hashtags: [],
+                scheduledAt: null
+            });
+        } catch (socialError) {
+            console.error("Facebook social post creation failed:", socialError);
+        }
+
+        return res.json({
+            success: true,
+            article: data
+        });
+    } catch (error) {
+        console.error("Publish route error:", error);
+
+        return res.status(500).json({
+            success: false,
+            error: "Unable to publish article."
+        });
+    }
+});
+
+console.log("NEWS ROUTER READY");
 
 export default router;
