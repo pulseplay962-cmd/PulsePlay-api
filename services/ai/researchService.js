@@ -1,9 +1,9 @@
 import fetch from "node-fetch";
 
 /**
- * PulseAI Gaming Research Service
+ * PulseAI Gaming + Hardware Research Service
  *
- * Fetches current gaming news and release information
+ * Fetches current gaming news and current PC/gaming hardware trends
  * from multiple public RSS feeds.
  *
  * This service researches facts.
@@ -11,33 +11,62 @@ import fetch from "node-fetch";
  */
 
 const NEWS_SOURCES = [
+    // ================================
+    // GAMING NEWS
+    // ================================
     {
         name: "Gematsu",
+        type: "gaming",
         url: "https://www.gematsu.com/feed"
     },
     {
         name: "Eurogamer",
+        type: "gaming",
         url: "https://www.eurogamer.net/feed"
     },
     {
         name: "PlayStation Blog",
+        type: "gaming",
         url: "https://blog.playstation.com/feed/"
     },
     {
         name: "Xbox Wire",
+        type: "gaming",
         url: "https://news.xbox.com/en-us/feed/"
     },
     {
         name: "PC Gamer",
+        type: "gaming",
         url: "https://www.pcgamer.com/rss/"
     },
     {
         name: "GamesRadar",
+        type: "gaming",
         url: "https://www.gamesradar.com/rss/"
     },
     {
         name: "Nintendo Life",
+        type: "gaming",
         url: "https://www.nintendolife.com/feeds/latest"
+    },
+    {
+        name: "TechRadar Gaming",
+        type: "gaming",
+        url: "https://www.techradar.com/feeds/tag/gaming"
+    },
+
+    // ================================
+    // HARDWARE + GAMING GEAR
+    // ================================
+    {
+        name: "Tom's Hardware",
+        type: "hardware",
+        url: "https://tomshardware.com/feeds/all"
+    },
+    {
+        name: "TechRadar Computing Components",
+        type: "hardware",
+        url: "https://www.techradar.com/feeds/tag/computing-components"
     }
 ];
 
@@ -153,7 +182,7 @@ function normalizeUrl(url = "") {
 
 async function fetchSource(source) {
     try {
-        console.log(`RESEARCH SOURCE: ${source.name}`);
+        console.log(`RESEARCH SOURCE: ${source.name} [${source.type}]`);
 
         const controller = new AbortController();
         const timeout = setTimeout(
@@ -184,6 +213,7 @@ async function fetchSource(source) {
         const articles = items
             .map(item => ({
                 source: source.name,
+                source_type: source.type,
                 title: getTag(item, "title"),
                 url: getLink(item),
                 published_at: getPublishedDate(item),
@@ -226,7 +256,7 @@ function deduplicateArticles(articles) {
 
 export async function researchGamingNews() {
     console.log("=================================");
-    console.log("PULSEAI GAMING RESEARCH");
+    console.log("PULSEAI GAMING + HARDWARE RESEARCH");
     console.log("=================================");
     console.log("RESEARCH SOURCES:", NEWS_SOURCES.length);
 
