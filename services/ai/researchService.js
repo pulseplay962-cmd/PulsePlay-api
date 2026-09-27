@@ -46,7 +46,6 @@ const MAX_ARTICLE_AGE_DAYS = 7;
 const FETCH_TIMEOUT_MS = 15000;
 
 function decodeHtml(text = "") {
-
     return text
         .replace(/<!\[CDATA\[|\]\]>/g, "")
         .replace(/&nbsp;/gi, " ")
@@ -65,35 +64,25 @@ function decodeHtml(text = "") {
 }
 
 function getTag(xml, tag) {
+    const match = xml.match(
+        new RegExp(
+            `<${tag}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/${tag}>`,
+            "i"
+        )
+    );
 
-    const match =
-        xml.match(
-            new RegExp(
-                `<${tag}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/${tag}>`,
-                "i"
-            )
-        );
-
-    return match
-        ? decodeHtml(match[1])
-        : "";
+    return match ? decodeHtml(match[1]) : "";
 }
 
 function getItems(xml) {
-
     return (
-        xml.match(
-            /<item[\s\S]*?<\/item>/gi
-        ) ||
-        xml.match(
-            /<entry[\s\S]*?<\/entry>/gi
-        ) ||
+        xml.match(/<item[\s\S]*?<\/item>/gi) ||
+        xml.match(/<entry[\s\S]*?<\/entry>/gi) ||
         []
     );
 }
 
 function getLink(item) {
-
     const hrefMatch = item.match(
         /<link[^>]+href=["']([^"']+)["']/i
     );
@@ -102,13 +91,10 @@ function getLink(item) {
         return normalizeUrl(hrefMatch[1]);
     }
 
-    return normalizeUrl(
-        getTag(item, "link")
-    );
+    return normalizeUrl(getTag(item, "link"));
 }
 
 function getPublishedDate(item) {
-
     return (
         getTag(item, "pubDate") ||
         getTag(item, "published") ||
@@ -117,21 +103,17 @@ function getPublishedDate(item) {
 }
 
 function isFreshArticle(article) {
-
     if (!article.published_at) {
         return true;
     }
 
-    const publishedTime =
-        Date.parse(article.published_at);
+    const publishedTime = Date.parse(article.published_at);
 
     if (Number.isNaN(publishedTime)) {
         return true;
     }
 
-    const ageMs =
-        Date.now() - publishedTime;
-
+    const ageMs = Date.now() - publishedTime;
     const maxAgeMs =
         MAX_ARTICLE_AGE_DAYS *
         24 *
@@ -143,105 +125,79 @@ function isFreshArticle(article) {
 }
 
 function normalizeUrl(url = "") {
+    try {
+        const parsed = new URL(
+            String(url).trim().replace(/&amp;/gi, "&")
+        );
 
-    return String(url)
-        .trim()
-        .replace(/&amp;/gi, "&");
+        [
+            "utm_source",
+            "utm_medium",
+            "utm_campaign",
+            "utm_term",
+            "utm_content",
+            "fbclid",
+            "gclid"
+        ].forEach(key => parsed.searchParams.delete(key));
+
+        parsed.hash = "";
+
+        return parsed.toString().replace(/\/$/, "");
+    } catch {
+        return String(url || "")
+            .trim()
+            .replace(/&amp;/gi, "&")
+            .replace(/\/$/, "");
+    }
 }
 
 async function fetchSource(source) {
-
     try {
+        console.log(`RESEARCH SOURCE: ${source.name}`);
 
-        console.log(
-            `RESEARCH SOURCE: ${source.name}`
+        const controller = new AbortController();
+        const timeout = setTimeout(
+            () => controller.abort(),
+            FETCH_TIMEOUT_MS
         );
-
-        const controller =
-            new AbortController();
-
-        const timeout =
-            setTimeout(
-                () => controller.abort(),
-                FETCH_TIMEOUT_MS
-            );
 
         let response;
 
         try {
-            response =
-                await fetch(
-                    source.url,
-                    {
-                        headers: {
-                            "User-Agent":
-                                "PulsePlay-PulseAI/1.0"
-                        },
-                        signal: controller.signal
-                    }
-                );
+            response = await fetch(source.url, {
+                headers: {
+                    "User-Agent": "PulsePlay-PulseAI/1.0"
+                },
+                signal: controller.signal
+            });
         } finally {
             clearTimeout(timeout);
         }
 
         if (!response.ok) {
-
-            throw new Error(
-                `HTTP ${response.status}`
-            );
-
+            throw new Error(`HTTP ${response.status}`);
         }
 
-        const xml =
-            await response.text();
+        const xml = await response.text();
+        const items = getItems(xml).slice(0, ARTICLES_PER_SOURCE);
 
-        const items =
-            getItems(xml)
-                .slice(
-                    0,
-                    ARTICLES_PER_SOURCE
-                );
+        const articles = items
+            .map(item => ({
+                source: source.name,
+                title: getTag(item, "title"),
+                url: getLink(item),
+                published_at: getPublishedDate(item),
+                summary: getTag(item, "description")
+            }))
+            .filter(item =>
+                item.title &&
+                item.url &&
+                isFreshArticle(item)
+            );
 
-        const articles =
-            items
-                .map(item => ({
-
-                    source:
-                        source.name,
-
-                    title:
-                        getTag(
-                            item,
-                            "title"
-                        ),
-
-                    url:
-                        getLink(item),
-
-                    published_at:
-                        getPublishedDate(item),
-
-                    summary:
-                        getTag(
-                            item,
-                            "description"
-                        )
-
-                }))
-                .filter(item =>
-                    item.title &&
-                    item.url &&
-                    isFreshArticle(item)
-                );
-
-        console.log(
-            `${source.name}: ${articles.length} articles`
-        );
-
+        console.log(`${source.name}: ${articles.length} articles`);
         return articles;
-
     } catch (error) {
-
         console.error(
             `Research source failed: ${source.name}`,
             error.message
@@ -252,68 +208,59 @@ async function fetchSource(source) {
 }
 
 function deduplicateArticles(articles) {
-
     const seen = new Set();
 
     return articles.filter(article => {
-
         const key =
             normalizeUrl(article.url) ||
-            article.title
-                .toLowerCase()
-                .trim();
+            article.title.toLowerCase().trim();
 
         if (seen.has(key)) {
-
             return false;
         }
 
         seen.add(key);
-
         return true;
     });
 }
 
 export async function researchGamingNews() {
+    console.log("=================================");
+    console.log("PULSEAI GAMING RESEARCH");
+    console.log("=================================");
+    console.log("RESEARCH SOURCES:", NEWS_SOURCES.length);
 
-    console.log(
-        "================================="
+    const results = await Promise.all(
+        NEWS_SOURCES.map(fetchSource)
     );
 
-    console.log(
-        "PULSEAI GAMING RESEARCH"
-    );
-
-    console.log(
-        "================================="
-    );
-
-    console.log(
-        "RESEARCH SOURCES:",
-        NEWS_SOURCES.length
-    );
-
-    const results =
-        await Promise.all(
-            NEWS_SOURCES.map(
-                fetchSource
+    const articles = deduplicateArticles(
+        results
+            .flat()
+            .filter(article =>
+                article.title &&
+                article.url
             )
-        );
+    ).sort((a, b) => {
+        const aTime = Date.parse(a.published_at || "");
+        const bTime = Date.parse(b.published_at || "");
 
-    const articles =
-        deduplicateArticles(
-            results
-                .flat()
-                .filter(article =>
-                    article.title &&
-                    article.url
-                )
-        );
+        if (Number.isNaN(aTime) && Number.isNaN(bTime)) {
+            return 0;
+        }
 
-    console.log(
-        "RESEARCH ARTICLES:",
-        articles.length
-    );
+        if (Number.isNaN(aTime)) {
+            return 1;
+        }
+
+        if (Number.isNaN(bTime)) {
+            return -1;
+        }
+
+        return bTime - aTime;
+    });
+
+    console.log("RESEARCH ARTICLES:", articles.length);
 
     return articles;
 }
