@@ -82,12 +82,20 @@ function isUsableGeneratedArticle(article) {
     return !blockedPhrases.some(phrase => lowerBody.includes(phrase));
 }
 
-async function withRetry(operation, label, attempts = 2) {
+async function withRetry(operation, label, attempts = 2, timeoutMs = 60000) {
     let lastError;
 
     for (let attempt = 1; attempt <= attempts; attempt++) {
         try {
-            return await operation();
+            return await Promise.race([
+                operation(),
+                new Promise((_, reject) =>
+                    setTimeout(
+                        () => reject(new Error("Operation timed out after " + timeoutMs + "ms")),
+                        timeoutMs
+                    )
+                )
+            ]);
         } catch (error) {
             lastError = error;
             console.warn(
@@ -208,6 +216,7 @@ router.post("/refresh-ai", async (req, res) => {
         }
 
         const posts = [];
+        const imageJobs = [];
 
         for (const source of freshSources) {
             const lane = source.source_type === "hardware" ? "hardware" : "gaming";
@@ -285,27 +294,44 @@ router.post("/refresh-ai", async (req, res) => {
                 continue;
             }
 
-            let finalPost = inserted;
-
-            if (!inserted.image_url && normalizedArticle.image_prompt) {
-                try {
-                    finalPost = await withRetry(
-                        () => generateQueueImage(inserted),
-                        "image generation for " + inserted.title
-                    );
-                } catch (imageError) {
-                    console.error(
-                        "AI news image generation failed; keeping article draft:",
-                        imageError
-                    );
-                }
-            }
-
             posts.push({
-                ...finalPost,
+                ...inserted,
                 content_lane: lane
             });
+
+            // Image generation is intentionally started in parallel so one slow
+            // OpenAI image request cannot hold the entire weekly refresh hostage.
+            if (!inserted.image_url && normalizedArticle.image_prompt) {
+                imageJobs.push(
+                    withRetry(
+                        () => generateQueueImage(inserted),
+                        "image generation for " + inserted.title,
+                        1,
+                        75000
+                    )
+                        .then(updatedPost => {
+                            const index = posts.findIndex(post => post.id === inserted.id);
+                            if (index >= 0) {
+                                posts[index] = {
+                                    ...updatedPost,
+                                    content_lane: lane
+                                };
+                            }
+                            return updatedPost;
+                        })
+                        .catch(imageError => {
+                            console.error(
+                                "AI news image generation failed; keeping article draft:",
+                                inserted.title,
+                                imageError
+                            );
+                            return inserted;
+                        })
+                );
+            }
         }
+
+        await Promise.allSettled(imageJobs);
 
         return res.json({
             success: true,
