@@ -415,7 +415,19 @@ router.post("/refresh-ai", async (req, res) => {
             }
         }
 
-        await Promise.allSettled(imageJobs);
+        // Do not hold the refresh request open while OpenAI image generation runs.
+        // Articles are already safely stored as drafts; image jobs continue in the
+        // background and update their queue rows when they finish.
+        if (imageJobs.length) {
+            Promise.allSettled(imageJobs).then(results => {
+                console.log(
+                    "AI news background image jobs finished:",
+                    results.filter(result => result.status === "fulfilled").length,
+                    "/",
+                    results.length
+                );
+            });
+        }
 
         return res.json({
             success: true,
@@ -453,7 +465,9 @@ router.post("/publish", async (req, res) => {
             content,
             image,
             category,
-            author
+            author,
+            source_url,
+            source_name
         } = req.body;
 
         if (!title || !content) {
@@ -474,6 +488,8 @@ router.post("/publish", async (req, res) => {
                     image: image || "",
                     category: category || "Gaming",
                     author: author || "PulseAI",
+                    source_url: normalizeNewsUrl(source_url || ""),
+                    source_name: source_name || "",
                     published: true,
                     status: "published"
                 }
