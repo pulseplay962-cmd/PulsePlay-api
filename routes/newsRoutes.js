@@ -156,6 +156,63 @@ function selectWeeklyCandidates(research, existingTitles, existingSourceUrls) {
     };
 }
 
+function createTestImage(title) {
+    const safeTitle = String(title || "PulsePlay Test").replace(/[&<>"]/g, char => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;"
+    }[char]));
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="675" viewBox="0 0 1200 675">
+        <defs>
+            <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
+                <stop offset="0%" stop-color="#070b14"/>
+                <stop offset="55%" stop-color="#160b2d"/>
+                <stop offset="100%" stop-color="#02040a"/>
+            </linearGradient>
+        </defs>
+        <rect width="1200" height="675" fill="url(#bg)"/>
+        <rect x="55" y="55" width="1090" height="565" rx="28" fill="none" stroke="#22d3ee" stroke-opacity=".35" stroke-width="3"/>
+        <text x="90" y="150" fill="#22d3ee" font-family="Arial,sans-serif" font-size="34" font-weight="700">PULSEPLAY • TEST MODE</text>
+        <text x="90" y="215" fill="#ffffff" font-family="Arial,sans-serif" font-size="46" font-weight="800">NO OPENAI CREDITS USED</text>
+        <foreignObject x="90" y="275" width="1020" height="220">
+            <div xmlns="http://www.w3.org/1999/xhtml" style="font-family:Arial,sans-serif;color:#cbd5e1;font-size:28px;line-height:1.35;">${safeTitle}</div>
+        </foreignObject>
+        <text x="90" y="565" fill="#8b5cf6" font-family="Arial,sans-serif" font-size="26" font-weight="700">Research + dedupe + weekly candidate selection</text>
+    </svg>`;
+    return "data:image/svg+xml;base64," + Buffer.from(svg).toString("base64");
+}
+
+function buildTestArticle(source, lane, index) {
+    const summary = String(source.summary || "No source summary was provided.").trim();
+    const sourceName = source.source || "Gaming/technology news feed";
+    const sourceDate = source.published_at || "Unknown";
+    const body = [
+        `TEST MODE — This is a simulated PulsePlay draft created without calling OpenAI. It is not intended for publication. The test is using the live research feed, freshness checks, duplicate checks, and weekly lane selection.`,
+        `\n\nThe selected ${lane === "hardware" ? "hardware and gaming accessory" : "gaming"} story is “${source.title}.” The research source is ${sourceName}, with a reported publication date of ${sourceDate}. The source summary supplied to the test pipeline says: ${summary}`,
+        `\n\nIn production, this source would be passed to the AI article generator with instructions to preserve verified facts, avoid invented details, clearly attribute unconfirmed claims, and produce a clean PulsePlay news article. In this no-credit test, those AI calls are deliberately skipped so the workflow can be validated without consuming OpenAI text or image credits.`,
+        `\n\nThe test also verifies the downstream shape expected by the AI Content Studio: headline, article body, social caption, image prompt, hashtags, source name, source URL, content lane, and a non-published draft marker. No database queue insert or publication action occurs during this test.`,
+        `\n\nSource URL: ${source.url}`
+    ].join("");
+    return {
+        id: `test-${Date.now()}-${index}`,
+        title: `[TEST] ${source.title}`,
+        content_type: "news",
+        category: lane === "hardware" ? "Gaming Hardware & Gear" : "Gaming News & Updates",
+        body,
+        social_caption: `[TEST] PulsePlay research draft: ${source.title}`,
+        image_prompt: `PulsePlay editorial gaming image for: ${source.title}. Dark futuristic gaming command center aesthetic, cyan and purple neon, no logos, no text.`,
+        hashtags: ["#PulsePlay", lane === "hardware" ? "#GamingHardware" : "#GamingNews", "#TestMode"],
+        image_url: createTestImage(source.title),
+        source_url: normalizeNewsUrl(source.url),
+        source_name: sourceName,
+        status: "test",
+        scheduled_date: new Date().toISOString().split("T")[0],
+        content_lane: lane,
+        test_mode: true
+    };
+}
+
 // ==================================
 // Refresh AI Gaming + Hardware News
 // ==================================
@@ -167,7 +224,9 @@ function selectWeeklyCandidates(research, existingTitles, existingSourceUrls) {
 
 router.post("/refresh-ai", async (req, res) => {
     try {
+        const testMode = String(req.query?.test || "").toLowerCase() === "true";
         console.log("=================================");
+        if (testMode) console.log("PULSEPLAY NO-CREDIT TEST MODE");
         console.log("PULSEPLAY AI GAMING + HARDWARE REFRESH");
         console.log("=================================");
 
@@ -202,6 +261,31 @@ router.post("/refresh-ai", async (req, res) => {
 
         const { selected: freshSources, gamingAvailable, hardwareAvailable } =
             selectWeeklyCandidates(research, existingTitles, existingSourceUrls);
+
+        if (testMode) {
+            const posts = freshSources.map((source, index) =>
+                buildTestArticle(
+                    source,
+                    source.source_type === "hardware" ? "hardware" : "gaming",
+                    index
+                )
+            );
+
+            return res.json({
+                success: true,
+                test_mode: true,
+                created: posts.length,
+                researched: research.length,
+                candidates: freshSources.length,
+                gaming_available: gamingAvailable,
+                hardware_available: hardwareAvailable,
+                openai_calls: 0,
+                database_writes: 0,
+                published: 0,
+                message: `NO-CREDIT TEST: generated ${posts.length} simulated draft(s). No OpenAI calls, queue inserts, or publishing occurred.`,
+                posts
+            });
+        }
 
         if (!freshSources.length) {
             return res.json({
