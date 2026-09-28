@@ -130,8 +130,6 @@ function selectWeeklyCandidates(research, existingTitles, existingSourceUrls) {
     const gaming = fresh.filter(item => item.source_type === "gaming");
     const hardware = fresh.filter(item => item.source_type === "hardware");
 
-    // Target a balanced weekly batch: 3 gaming stories + 2 hardware/gear stories.
-    // If one lane has fewer valid stories, fill the remaining slots from the other.
     const selected = [
         ...gaming.slice(0, 3),
         ...hardware.slice(0, 2)
@@ -156,8 +154,36 @@ function selectWeeklyCandidates(research, existingTitles, existingSourceUrls) {
     };
 }
 
+async function keepOnlyCurrentNewsDrafts(maxDrafts = 5) {
+    const { data: drafts, error } = await supabase
+        .from("ai_content_queue")
+        .select("id, created_at")
+        .eq("content_type", "news")
+        .eq("status", "draft")
+        .order("created_at", { ascending: false })
+        .limit(1000);
+
+    if (error) throw error;
+
+    const staleIds = (drafts || [])
+        .slice(maxDrafts)
+        .map(item => item.id)
+        .filter(Boolean);
+
+    if (!staleIds.length) return 0;
+
+    const { error: archiveError } = await supabase
+        .from("ai_content_queue")
+        .update({ status: "archived" })
+        .in("id", staleIds);
+
+    if (archiveError) throw archiveError;
+
+    return staleIds.length;
+}
+
 function createTestImage(title) {
-    const safeTitle = String(title || "PulsePlay Test").replace(/[&<>"]/g, char => ({
+    const safeTitle = String(title || "PulsePlay Test").replace(/[&<>\"]/g, char => ({
         "&": "&amp;",
         "<": "&lt;",
         ">": "&gt;",
@@ -212,15 +238,6 @@ function buildTestArticle(source, lane, index) {
         test_mode: true
     };
 }
-
-// ==================================
-// Refresh AI Gaming + Hardware News
-// ==================================
-// Weekly pipeline:
-//   Research -> freshness -> dedupe -> 3 gaming + 2 hardware candidates
-//   -> AI article -> quality gate -> original AI image -> draft queue.
-// Nothing is published automatically.
-// ==================================
 
 router.post("/refresh-ai", async (req, res) => {
     try {
@@ -288,12 +305,14 @@ router.post("/refresh-ai", async (req, res) => {
         }
 
         if (!freshSources.length) {
+            const archived = await keepOnlyCurrentNewsDrafts(5);
             return res.json({
                 success: true,
                 created: 0,
                 researched: research.length,
                 gaming_available: gamingAvailable,
                 hardware_available: hardwareAvailable,
+                archived_drafts: archived,
                 message: "No new gaming or hardware news was found that is not already in the AI queue.",
                 posts: []
             });
@@ -383,8 +402,6 @@ router.post("/refresh-ai", async (req, res) => {
                 content_lane: lane
             });
 
-            // Image generation is intentionally started in parallel so one slow
-            // OpenAI image request cannot hold the entire weekly refresh hostage.
             if (!inserted.image_url && normalizedArticle.image_prompt) {
                 imageJobs.push(
                     withRetry(
@@ -415,9 +432,8 @@ router.post("/refresh-ai", async (req, res) => {
             }
         }
 
-        // Do not hold the refresh request open while OpenAI image generation runs.
-        // Articles are already safely stored as drafts; image jobs continue in the
-        // background and update their queue rows when they finish.
+        const archivedDrafts = await keepOnlyCurrentNewsDrafts(5);
+
         if (imageJobs.length) {
             Promise.allSettled(imageJobs).then(results => {
                 console.log(
@@ -432,13 +448,14 @@ router.post("/refresh-ai", async (req, res) => {
         return res.json({
             success: true,
             created: posts.length,
+            archived_drafts: archivedDrafts,
             researched: research.length,
             candidates: freshSources.length,
             gaming_available: gamingAvailable,
             hardware_available: hardwareAvailable,
             message:
                 posts.length > 0
-                    ? `Created ${posts.length} fresh gaming/hardware news draft(s).`
+                    ? `Created ${posts.length} fresh gaming/hardware news draft(s) and kept only the newest 5 news drafts.`
                     : "Fresh sources were found, but the AI could not produce complete articles from the available candidates.",
             posts
         });
@@ -451,10 +468,6 @@ router.post("/refresh-ai", async (req, res) => {
         });
     }
 });
-
-// ==================================
-// Publish Article From PulseAI
-// ==================================
 
 router.post("/publish", async (req, res) => {
     try {
