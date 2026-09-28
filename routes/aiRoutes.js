@@ -716,77 +716,95 @@ router.post(
 
 
 // =====================================
+// =====================================
 // REAL OPENAI SINGLE ARTICLE TEST
 // =====================================
+//
+// Supports both POST and GET so the health
+// check can be opened directly in a browser.
+//
+// POST may provide:
+// { "topic": "..." }
+//
+// GET uses the default health-check topic.
+//
+// =====================================
 
-router.post(
-    "/test-article",
-    async (req, res) => {
+const runArticleTest = async (req, res) => {
 
-        try {
+    try {
 
-            const topic =
-                req.body?.topic ||
-                "The latest developments in the gaming industry";
+        const topic =
+            req.body?.topic ||
+            req.query?.topic ||
+            "PulsePlay AI health check";
 
-            console.log(
-                "================================="
-            );
+        console.log(
+            "================================="
+        );
 
-            console.log(
-                "PULSEAI REAL OPENAI TEST"
-            );
+        console.log(
+            "PULSEAI REAL OPENAI TEST"
+        );
 
-            console.log(
-                "TOPIC:",
+        console.log(
+            "TOPIC:",
+            topic
+        );
+
+        console.log(
+            "================================="
+        );
+
+        const article =
+            await generateArticle(
                 topic
             );
 
-            console.log(
-                "================================="
-            );
+        return res.json({
 
-            const article =
-                await generateArticle(
-                    topic
-                );
+            success: true,
 
-            return res.json({
+            development: false,
 
-                success: true,
+            mode: "openai",
 
-                development: false,
+            article
 
-                mode: "openai",
+        });
 
-                article
+    } catch (error) {
 
-            });
+        console.error(
+            "PULSEAI REAL TEST ERROR:",
+            error
+        );
 
-        } catch (error) {
+        return res.status(500).json({
 
-            console.error(
-                "PULSEAI REAL TEST ERROR:",
-                error
-            );
+            success: false,
 
-            return res.status(500).json({
+            error:
+                error.message ||
+                "AI test generation failed."
 
-                success: false,
-
-                error:
-                    error.message ||
-                    "AI test generation failed."
-
-            });
-
-        }
+        });
 
     }
+
+};
+
+router.get(
+    "/test-article",
+    runArticleTest
+);
+
+router.post(
+    "/test-article",
+    runArticleTest
 );
 
 
-// =====================================
 // DEVELOPMENT GENERATE ROUTE
 // =====================================
 
