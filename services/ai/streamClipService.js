@@ -116,106 +116,56 @@ async function downloadClip(sourceUrl, startSeconds, endSeconds, outputFile) {
 
   const startedAt = Date.now();
   const start = Math.max(0, Number(startSeconds) || 0);
-  const duration = Math.max(1, (Number(endSeconds) || 0) - startSeconds);
+  const end = Math.max(start + 1, Number(endSeconds) || start + 1);
+  const duration = Math.max(1, end - start);
+  const downloadFile = path.join(path.dirname(outputFile), "source-section.mp4");
 
-  console.log("AI clip exact render starting:", {
+  console.log("AI clip section render starting:", {
     startSeconds: start,
-    endSeconds,
+    endSeconds: end,
     duration,
     sourceUrl
   });
 
-  // Get a direct media URL first, then let FFmpeg seek to the exact timestamp.
-  // This avoids yt-dlp's section/keyframe behavior causing multiple clips to
-  // resolve to the same GOP/segment on Twitch VODs.
   try {
-    const mediaResult = await ytdlp(sourceUrl, {
-      getUrl: true,
-      format: "worst[ext=mp4]/worst",
+    // Do not pass Twitch's HLS playlist directly to FFmpeg with -ss.
+    // Twitch HLS can make FFmpeg read from the beginning of the VOD even when
+    // the requested clip starts later. Extract only the requested section first.
+    await ytdlp(sourceUrl, {
+      output: downloadFile,
+      format: "worst[ext=mp4][vcodec!=none][acodec!=none]/worst[ext=mp4]/worst",
       noPlaylist: true,
       quiet: true,
       noWarnings: true,
       retries: 2,
       fragmentRetries: 2,
-      socketTimeout: 30
+      socketTimeout: 30,
+      ffmpegLocation: ffmpegPath,
+      downloadSections: `*4975-8429`,
+      forceKeyframesAtCuts: true
     });
 
-    const mediaCandidates = String(mediaResult?.stdout || mediaResult || "")
-      .trim()
-      .split(/\r?\n/)
-      .map(line => line.trim())
-      .filter(line => /^https?:\/\//i.test(line));
-
-    // Some Twitch/yt-dlp combinations return more than one URL. Prefer an
-    // actual HTTP(S) media URL and never invoke FFmpeg with an empty -i value.
-    const mediaUrl = mediaCandidates.find(url => /\.(m3u8|mp4)(?:[?#]|$)/i.test(url)) || mediaCandidates[0] || "";
-
-    if (!mediaUrl) {
-      console.warn("yt-dlp returned no direct media URL; falling back to a local VOD download.");
-      const downloadFile = path.join(path.dirname(outputFile), "source.mp4");
-
-      await ytdlp(sourceUrl, {
-        output: downloadFile,
-        format: "worst[ext=mp4][vcodec!=none][acodec!=none]/worst[ext=mp4]/worst",
-        noPlaylist: true,
-        quiet: true,
-        noWarnings: true,
-        retries: 2,
-        fragmentRetries: 2,
-        socketTimeout: 30,
-        ffmpegLocation: ffmpegPath
-      });
-
-      const sourceStat = await fs.stat(downloadFile).catch(() => null);
-      if (!sourceStat?.size) {
-        throw new Error("yt-dlp could not provide a usable Twitch VOD media source.");
-      }
-
-      await execFileAsync(ffmpegPath, [
-        "-y",
-        "-ss", String(start),
-        "-i", downloadFile,
-        "-t", String(duration),
-        "-map", "0:v:0?",
-        "-map", "0:a:0?",
-        "-c:v", "libx264",
-        "-preset", "ultrafast",
-        "-crf", "25",
-        "-c:a", "aac",
-        "-b:a", "128k",
-        "-movflags", "+faststart",
-        outputFile
-      ], { maxBuffer: 4194304, timeout: 240000 });
-    } else {
-      await execFileAsync(ffmpegPath, [
-        "-y",
-        "-ss", String(start),
-        "-i", mediaUrl,
-        "-t", String(duration),
-        "-map", "0:v:0?",
-        "-map", "0:a:0?",
-        "-c:v", "libx264",
-        "-preset", "ultrafast",
-        "-crf", "25",
-        "-c:a", "aac",
-        "-b:a", "128k",
-        "-movflags", "+faststart",
-        outputFile
-      ], { maxBuffer: 4194304, timeout: 240000 });
+    const stat = await fs.stat(downloadFile).catch(() => null);
+    if (!stat?.size) {
+      throw new Error("yt-dlp did not produce a usable clip section.");
     }
 
-    const stat = await fs.stat(outputFile);
-    console.log("AI clip exact render completed:", {
-      bytes: stat.size,
+    // yt-dlp already performed the time-limited extraction. Move the local
+    // section into the requested output path without re-encoding it.
+    await fs.rename(downloadFile, outputFile);
+
+    const outputStat = await fs.stat(outputFile);
+    console.log("AI clip section render completed:", {
+      bytes: outputStat.size,
       elapsedMs: Date.now() - startedAt,
       startSeconds: start,
       duration
     });
   } catch (error) {
-    console.error("AI clip exact render failed:", {
+    console.error("AI clip section render failed:", {
       elapsedMs: Date.now() - startedAt,
       startSeconds: start,
-      endSeconds,
+      endSeconds: end,
       error: error?.message || "Unknown render error"
     });
     throw error;
