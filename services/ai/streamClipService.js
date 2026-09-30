@@ -140,31 +140,69 @@ async function downloadClip(sourceUrl, startSeconds, endSeconds, outputFile) {
       socketTimeout: 30
     });
 
-    const mediaUrl = String(mediaResult?.stdout || mediaResult || "")
+    const mediaCandidates = String(mediaResult?.stdout || mediaResult || "")
       .trim()
       .split(/\r?\n/)
-      .filter(Boolean)
-      .pop();
+      .map(line => line.trim())
+      .filter(line => /^https?:\/\//i.test(line));
 
-    if (!mediaUrl || !/^https?:\/\//i.test(mediaUrl)) {
-      throw new Error("yt-dlp did not return a usable direct media URL.");
+    // Some Twitch/yt-dlp combinations return more than one URL. Prefer an
+    // actual HTTP(S) media URL and never invoke FFmpeg with an empty -i value.
+    const mediaUrl = mediaCandidates.find(url => /\.(m3u8|mp4)(?:[?#]|$)/i.test(url)) || mediaCandidates[0] || "";
+
+    if (!mediaUrl) {
+      console.warn("yt-dlp returned no direct media URL; falling back to a local VOD download.");
+      const downloadFile = path.join(path.dirname(outputFile), "source.mp4");
+
+      await ytdlp(sourceUrl, {
+        output: downloadFile,
+        format: "worst[ext=mp4][vcodec!=none][acodec!=none]/worst[ext=mp4]/worst",
+        noPlaylist: true,
+        quiet: true,
+        noWarnings: true,
+        retries: 2,
+        fragmentRetries: 2,
+        socketTimeout: 30,
+        ffmpegLocation: ffmpegPath
+      });
+
+      const sourceStat = await fs.stat(downloadFile).catch(() => null);
+      if (!sourceStat?.size) {
+        throw new Error("yt-dlp could not provide a usable Twitch VOD media source.");
+      }
+
+      await execFileAsync(ffmpegPath, [
+        "-y",
+        "-ss", String(start),
+        "-i", downloadFile,
+        "-t", String(duration),
+        "-map", "0:v:0?",
+        "-map", "0:a:0?",
+        "-c:v", "libx264",
+        "-preset", "ultrafast",
+        "-crf", "25",
+        "-c:a", "aac",
+        "-b:a", "128k",
+        "-movflags", "+faststart",
+        outputFile
+      ], { maxBuffer: 4194304, timeout: 240000 });
+    } else {
+      await execFileAsync(ffmpegPath, [
+        "-y",
+        "-ss", String(start),
+        "-i", mediaUrl,
+        "-t", String(duration),
+        "-map", "0:v:0?",
+        "-map", "0:a:0?",
+        "-c:v", "libx264",
+        "-preset", "ultrafast",
+        "-crf", "25",
+        "-c:a", "aac",
+        "-b:a", "128k",
+        "-movflags", "+faststart",
+        outputFile
+      ], { maxBuffer: 4194304, timeout: 240000 });
     }
-
-    await execFileAsync(ffmpegPath, [
-      "-y",
-      "-ss", String(start),
-      "-i", mediaUrl,
-      "-t", String(duration),
-      "-map", "0:v:0?",
-      "-map", "0:a:0?",
-      "-c:v", "libx264",
-      "-preset", "ultrafast",
-      "-crf", "25",
-      "-c:a", "aac",
-      "-b:a", "128k",
-      "-movflags", "+faststart",
-      outputFile
-    ], { maxBuffer: 4194304, timeout: 240000 });
 
     const stat = await fs.stat(outputFile);
     console.log("AI clip exact render completed:", {
