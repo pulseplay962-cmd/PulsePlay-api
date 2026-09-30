@@ -141,7 +141,7 @@ async function downloadClip(sourceUrl, startSeconds, endSeconds, outputFile) {
       fragmentRetries: 2,
       socketTimeout: 30,
       ffmpegLocation: ffmpegPath,
-      downloadSections: `*4975-8429`,
+      downloadSections: `*${start}-${end}`,
       forceKeyframesAtCuts: true
     });
 
@@ -407,16 +407,50 @@ async function detectMomentsFromTranscript({ vod, segments }) {
 
   let parsed = {};
   try { parsed = JSON.parse(response?.choices?.[0]?.message?.content || "{}"); } catch {}
+  const minimumClipSeconds = Math.max(30, Number(process.env.AI_CLIP_MIN_SECONDS) || 45);
+  const preferredClipSeconds = Math.max(minimumClipSeconds, Number(process.env.AI_CLIP_TARGET_SECONDS) || 60);
+  const maximumClipSeconds = Math.min(180, Math.max(preferredClipSeconds, Number(process.env.AI_CLIP_MAX_SECONDS) || 120));
+  const vodDuration = parseDuration(vod.duration);
+
   return (parsed.moments || [])
     .filter(m => Number.isFinite(Number(m.start_seconds)) && Number.isFinite(Number(m.end_seconds)))
-    .map(m => ({
-      startSeconds: Math.max(0, Math.floor(Number(m.start_seconds))),
-      endSeconds: Math.floor(Number(m.end_seconds)),
-      momentType: m.moment_type || "highlight",
-      score: Math.max(0, Math.min(100, Number(m.score) || 0)),
-      context: m.context || ""
-    }))
-    .filter(m => m.endSeconds > m.startSeconds && m.endSeconds - m.startSeconds <= 180)
+    .map(m => {
+      let startSeconds = Math.max(0, Math.floor(Number(m.start_seconds)));
+      let endSeconds = Math.floor(Number(m.end_seconds));
+
+      // Transcript timestamps often describe only the exact spoken sentence
+      // (sometimes 1-10 seconds). A social clip needs the surrounding gameplay
+      // context, so expand short moments around their midpoint.
+      let duration = endSeconds - startSeconds;
+      if (duration > 0 && duration < minimumClipSeconds) {
+        const center = (startSeconds + endSeconds) / 2;
+        const target = Math.min(preferredClipSeconds, maximumClipSeconds);
+        startSeconds = Math.max(0, Math.floor(center - target / 2));
+        endSeconds = Math.ceil(startSeconds + target);
+
+        if (vodDuration > 0 && endSeconds > vodDuration) {
+          endSeconds = Math.floor(vodDuration);
+          startSeconds = Math.max(0, endSeconds - target);
+        }
+      }
+
+      // Keep every generated clip inside the VOD and under the renderer limit.
+      if (vodDuration > 0) {
+        endSeconds = Math.min(endSeconds, Math.floor(vodDuration));
+      }
+
+      duration = endSeconds - startSeconds;
+      return {
+        startSeconds,
+        endSeconds,
+        momentType: m.moment_type || "highlight",
+        score: Math.max(0, Math.min(100, Number(m.score) || 0)),
+        context: m.context || ""
+      };
+    })
+    .filter(m => m.endSeconds > m.startSeconds &&
+      m.endSeconds - m.startSeconds >= minimumClipSeconds &&
+      m.endSeconds - m.startSeconds <= maximumClipSeconds)
     .sort((a,b) => b.score - a.score)
     .slice(0, Number(process.env.AI_CLIP_MAX_CANDIDATES) || 10);
 }
