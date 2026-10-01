@@ -15,6 +15,11 @@ const DEFAULT_CHANNEL = process.env.TWITCH_CHANNEL || "Veiltactician";
 const TITLE_MODEL = process.env.PULSEAI_MODEL || "gpt-4.1-mini";
 const ffmpegPath = process.env.FFMPEG_PATH || (process.platform === "linux" ? "/usr/bin/ffmpeg" : ffmpegStaticPath);
 
+function normalizeTwitchThumbnail(url, width = 640, height = 360) {
+  if (!url) return null;
+  return String(url).replace(/%\{width\}/g, String(width)).replace(/%\{height\}/g, String(height));
+}
+
 function clock(seconds) {
   const total = Math.max(0, Math.floor(Number(seconds) || 0));
   const h = Math.floor(total / 3600);
@@ -98,8 +103,8 @@ export async function publishStreamVod(vodId, db = supabase) {
   const videoRow = {
     title: vod.title || "Veiltactician VOD",
     description: vod.description || "",
-    thumbnail: vod.thumbnail_url || null,
-    thumbnail_url: vod.thumbnail_url || null,
+    thumbnail: normalizeTwitchThumbnail(vod.thumbnail_url),
+    thumbnail_url: normalizeTwitchThumbnail(vod.thumbnail_url),
     url: vod.url || null,
     featured: false,
     twitch_id: vod.twitch_id || null,
