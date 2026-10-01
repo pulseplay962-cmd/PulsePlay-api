@@ -26,12 +26,11 @@ const allowedOrigins = new Set([
 ]);
 
 const corsOptions = {
-    origin(origin, callback) {
-        if (!origin || allowedOrigins.has(origin)) {
-            return callback(null, true);
-        }
-        return callback(new Error("CORS origin not allowed"));
-    },
+    // PulsePlay admin requests use an explicit Supabase bearer token, so
+    // browser CORS does not need credentialed cookies. Allow the live site,
+    // Render preview, localhost, and future PulsePlay web origins without
+    // blocking the request before it reaches the API.
+    origin: true,
     credentials: false,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
