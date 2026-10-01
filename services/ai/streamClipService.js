@@ -91,6 +91,47 @@ export async function listStreamVods(limit = 20) {
   return data || [];
 }
 
+export async function publishStreamVod(vodId, db = supabase) {
+  const { data: vod, error: vodError } = await db.from("ai_stream_vods").select("*").eq("id", vodId).single();
+  if (vodError || !vod) throw new Error("Stream VOD not found.");
+
+  const videoRow = {
+    title: vod.title || "Veiltactician VOD",
+    description: vod.description || "",
+    thumbnail: vod.thumbnail_url || null,
+    thumbnail_url: vod.thumbnail_url || null,
+    url: vod.url || null,
+    featured: false,
+    twitch_id: vod.twitch_id || null,
+    published_at: vod.published_at || null,
+    duration: vod.duration || null,
+    view_count: Number(vod.view_count) || 0,
+    user_login: vod.channel || DEFAULT_CHANNEL
+  };
+
+  const { data: existing, error: existingError } = await db
+    .from("videos")
+    .select("id")
+    .eq("twitch_id", vod.twitch_id)
+    .maybeSingle();
+
+  if (existingError) throw existingError;
+
+  let saved;
+  if (existing?.id) {
+    const { data, error } = await db.from("videos").update(videoRow).eq("id", existing.id).select().single();
+    if (error) throw error;
+    saved = data;
+  } else {
+    const { data, error } = await db.from("videos").insert(videoRow).select().single();
+    if (error) throw error;
+    saved = data;
+  }
+
+  await db.from("ai_stream_vods").update({ status: "loaded_to_site" }).eq("id", vod.id);
+  return saved;
+}
+
 export async function createClipCandidate({ vodId, startSeconds, endSeconds, momentType="highlight", context="", score=0 }) {
   const { data: vod, error: vodError } = await supabase.from("ai_stream_vods").select("*").eq("id", vodId).single();
   if (vodError || !vod) throw new Error("Stream VOD not found.");
