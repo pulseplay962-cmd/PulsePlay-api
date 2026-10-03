@@ -635,7 +635,7 @@ export async function autoRenderTopClips(vodId, limit = 3, authorization = "") {
         throw new Error(result.error || `Render worker returned HTTP ${lastStatus || 500}.`);
       }
 
-      queued.push({ id: clip.id, queueLength: result.queueLength || 0 }); (err) {
+      queued.push({ id: clip.id, queueLength: result.queueLength || 0 });\n    } catch (err) {
       console.error("AI auto-render queue failed:", err);
       errors.push({ id: clip.id, error: err.message || "Unable to queue clip render." });
     }
