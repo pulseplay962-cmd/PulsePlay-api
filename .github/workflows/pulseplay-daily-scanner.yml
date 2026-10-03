@@ -1,0 +1,67 @@
+name: PulsePlay Daily Health & Code Scanner
+
+on:
+  schedule:
+    - cron: "0 13 * * *"
+  workflow_dispatch:
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout PulsePlay API
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install API dependencies
+        run: npm ci
+
+      - name: Scan API JavaScript syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          find . -type f -name "*.js" -not -path "./node_modules/*" -print0 |
+            xargs -0 -n1 node --check
+
+      - name: Clone and scan frontend
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --depth 1 https://github.com/pulseplay962-cmd/PulsePlay-v2.git ../PulsePlay-v2
+          cd ../PulsePlay-v2
+          npm ci
+          npm run lint
+          npm run build
+
+      - name: Check API health
+        run: curl --fail --silent --show-error --max-time 30 https://pulseplay-api-yubf.onrender.com/api/health
+
+      - name: Check clip worker health
+        run: curl --fail --silent --show-error --max-time 30 https://pulseplay-ai-clip-render-worker.onrender.com/health
+
+      - name: Check PulsePlay website
+        run: curl --fail --silent --show-error --max-time 30 https://pulseplay.online/
+
+      - name: Check www website
+        run: curl --fail --silent --show-error --max-time 30 https://www.pulseplay.online/
+
+      - name: Report dependency audit
+        shell: bash
+        run: |
+          npm audit --audit-level=high || true
+          cd ../PulsePlay-v2
+          npm audit --audit-level=high || true
+
+      - name: Scanner summary
+        if: always()
+        run: |
+          echo "PulsePlay daily scanner completed."
+          echo "Checks: API syntax, frontend lint/build, API health, clip worker health, public site, www site."
+          echo "Auto-Render is intentionally NOT tested or enabled."
