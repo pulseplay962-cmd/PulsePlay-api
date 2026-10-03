@@ -601,25 +601,41 @@ export async function autoRenderTopClips(vodId, limit = 3, authorization = "") {
   for (const clip of clips || []) {
     try {
       const workerEndpoint = workerUrl.endsWith("/") ? workerUrl.slice(0, -1) : workerUrl;
-      const response = await fetch(`${workerEndpoint}/render`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Clip-Worker-Secret": workerSecret,
-        },
-        body: JSON.stringify({ clipId: clip.id, authorization }),
-      });
-
-      const text = await response.text();
+      // Render can briefly return HTTP 429 while the worker is waking or
+      // being throttled. Retry with a short backoff before marking the clip failed.
+      let response;
+      let text = "";
       let result = {};
-      try { result = JSON.parse(text || "{}"); } catch {}
+      let lastStatus = 0;
 
-      if (!response.ok || !result.success) {
-        throw new Error(result.error || `Render worker returned HTTP ${response.status}.`);
+      for (let attempt = 1; attempt <= 4; attempt += 1) {
+        response = await fetch(`${workerEndpoint}/render`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Clip-Worker-Secret": workerSecret,
+          },
+          body: JSON.stringify({ clipId: clip.id, authorization }),
+        });
+
+        lastStatus = response.status;
+        text = await response.text();
+        result = {};
+        try { result = JSON.parse(text || "{}"); } catch {}
+
+        if (response.status !== 429) break;
+
+        const retryAfter = Number(response.headers.get("retry-after") || 0);
+        const delayMs = Math.min(8000, Math.max(1000, retryAfter * 1000 || attempt * 1500));
+        console.warn("AI clip worker throttled; retrying:", { clipId: clip.id, attempt, delayMs });
+        await new Promise(resolve => setTimeout(resolve, delayMs));
       }
 
-      queued.push({ id: clip.id, queueLength: result.queueLength || 0 });
-    } catch (err) {
+      if (!response?.ok || !result.success) {
+        throw new Error(result.error || `Render worker returned HTTP ${lastStatus || 500}.`);
+      }
+
+      queued.push({ id: clip.id, queueLength: result.queueLength || 0 }); (err) {
       console.error("AI auto-render queue failed:", err);
       errors.push({ id: clip.id, error: err.message || "Unable to queue clip render." });
     }
