@@ -1,6 +1,15 @@
 import express from "express";
 import { createClient } from "@supabase/supabase-js";
-import { chat, createSession, getMemory, getSystemSnapshot, remember } from "../services/jarvisCore.js";
+import {
+  chat,
+  createSession,
+  getApprovals,
+  getMemory,
+  getSystemSnapshot,
+  remember,
+  requestApproval,
+  resolveApproval
+} from "../services/jarvisCore.js";
 
 const router = express.Router();
 const supabaseAuth = createClient(
@@ -87,9 +96,71 @@ router.get("/ui/health", requireSupabaseUser, async (req, res, next) => {
   }
 });
 
+router.get("/ui/approvals", requireSupabaseUser, async (req, res, next) => {
+  try {
+    res.json({
+      success: true,
+      approvals: await getApprovals(req.query.status || null, req.query.limit)
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post("/ui/approvals", requireSupabaseUser, async (req, res, next) => {
+  try {
+    if (!req.body?.action) {
+      return res.status(400).json({ success: false, error: "action is required." });
+    }
+
+    const approval = await requestApproval({
+      action: req.body.action,
+      payload: req.body.payload || {},
+      sessionId: req.body.sessionId || null
+    });
+
+    res.status(201).json({ success: true, approval });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post("/ui/approvals/:id/resolve", requireSupabaseUser, async (req, res, next) => {
+  try {
+    const approval = await resolveApproval(
+      req.params.id,
+      req.body?.status,
+      req.body?.sessionId || null
+    );
+
+    res.json({ success: true, approval });
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.get("/ui/memory", requireSupabaseUser, async (req, res, next) => {
   try {
     res.json({ success: true, memory: await getMemory(req.query.limit) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post("/ui/memory", requireSupabaseUser, async (req, res, next) => {
+  try {
+    if (!req.body?.content) {
+      return res.status(400).json({ success: false, error: "content is required." });
+    }
+
+    const memory = await remember({
+      content: req.body.content,
+      memoryType: req.body.memoryType || "fact",
+      importance: req.body.importance || 5,
+      source: "command-center"
+    });
+
+    res.status(201).json({ success: true, memory });
   } catch (error) {
     next(error);
   }
