@@ -62,6 +62,74 @@ export async function remember({ content, memoryType = "fact", importance = 5, s
   return data;
 }
 
+export async function getApprovals(status = null, limit = 25) {
+  let query = supabase
+    .from("jarvis_approvals")
+    .select("id,action,payload,status,requested_at,resolved_at")
+    .order("requested_at", { ascending: false })
+    .limit(Math.min(Number(limit) || 25, 100));
+
+  if (status) query = query.eq("status", String(status));
+
+  const { data, error } = await query;
+  if (error) throw error;
+  return data || [];
+}
+
+export async function requestApproval({ action, payload = {}, sessionId = null }) {
+  const cleanAction = String(action || "").trim();
+  if (!cleanAction) throw new Error("Approval action is required.");
+
+  const { data, error } = await supabase
+    .from("jarvis_approvals")
+    .insert({
+      action: cleanAction,
+      payload: payload && typeof payload === "object" ? payload : {},
+      status: "pending"
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+
+  await audit(sessionId, "approval_requested", cleanAction, {
+    approvalId: data.id
+  });
+
+  return data;
+}
+
+export async function resolveApproval(id, status, sessionId = null) {
+  const approvalId = String(id || "").trim();
+  const nextStatus = String(status || "").toLowerCase();
+
+  if (!approvalId) throw new Error("Approval id is required.");
+  if (!["approved", "rejected"].includes(nextStatus)) {
+    throw new Error("Approval status must be approved or rejected.");
+  }
+
+  const { data, error } = await supabase
+    .from("jarvis_approvals")
+    .update({
+      status: nextStatus,
+      resolved_at: new Date().toISOString()
+    })
+    .eq("id", approvalId)
+    .eq("status", "pending")
+    .select()
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) throw new Error("Approval is missing or is no longer pending.");
+
+  await audit(sessionId, "approval_resolved", data.action, {
+    approvalId: data.id,
+    status: nextStatus
+  });
+
+  return data;
+}
+
 export async function createSession(title = "JARVIS Session") {
   const { data, error } = await supabase
     .from("jarvis_sessions")
