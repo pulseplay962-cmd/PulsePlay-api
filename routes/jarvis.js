@@ -79,6 +79,22 @@ router.post("/sessions", requireJarvisKey, async (req, res, next) => {
   }
 });
 
+router.get("/ui/health", requireSupabaseUser, async (req, res, next) => {
+  try {
+    res.json({ success: true, ...(await getSystemSnapshot()) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get("/ui/memory", requireSupabaseUser, async (req, res, next) => {
+  try {
+    res.json({ success: true, memory: await getMemory(req.query.limit) });
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.post("/ui/chat", requireSupabaseUser, async (req, res, next) => {
   try {
     if (!req.body?.message) {
