@@ -13,27 +13,16 @@ import stripeWebhookRoutes from "./routes/stripeWebhook.js";
 import monetizationRoutes from "./routes/monetization.js";
 import recommendationsRoutes from "./routes/recommendations.js";
 import streamClipsRoutes from "./routes/streamClips.js";
+import jarvisRoutes from "./routes/jarvis.js";
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-const allowedOrigins = new Set([
-    "http://localhost:5173",
-    "http://localhost:5174",
-    "https://pulseplay-v2-f0wz.onrender.com",
-    "https://pulseplay.online",
-    "https://www.pulseplay.online"
-]);
-
 const corsOptions = {
-    // PulsePlay admin requests use an explicit Supabase bearer token, so
-    // browser CORS does not need credentialed cookies. Allow the live site,
-    // Render preview, localhost, and future PulsePlay web origins without
-    // blocking the request before it reaches the API.
     origin: true,
     credentials: false,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Jarvis-Key"],
     optionsSuccessStatus: 204
 };
 
@@ -81,6 +70,10 @@ console.log("Printful routes mounted at /api/printful");
 
 app.use("/api/printful", printfulRoutes);
 app.use("/api/checkout", checkoutRoutes);
+
+console.log("Loading JARVIS routes...");
+app.use("/api/jarvis", jarvisRoutes);
+console.log("JARVIS routes mounted at /api/jarvis");
 
 console.log("News routes mounted at /api/news");
 
