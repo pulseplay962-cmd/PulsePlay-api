@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import { createClient } from "@supabase/supabase-js";
+import { parseReadOnlyToolArguments } from "./jarvisToolPolicy.js";
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
@@ -187,12 +188,7 @@ const READ_ONLY_TOOLS = [
 ];
 
 async function runReadOnlyTool(name, rawArguments, sessionId) {
-  let args = {};
-  try {
-    args = rawArguments ? JSON.parse(rawArguments) : {};
-  } catch {
-    throw new Error("Tool arguments were not valid JSON.");
-  }
+  const args = parseReadOnlyToolArguments(name, rawArguments);
 
   let result;
   switch (name) {
@@ -200,7 +196,7 @@ async function runReadOnlyTool(name, rawArguments, sessionId) {
       result = await getSystemSnapshot();
       break;
     case "list_jarvis_memories":
-      result = await getMemory(Math.max(1, Math.min(20, Number(args.limit) || 10)));
+      result = await getMemory(args.limit ?? 10);
       break;
     case "list_pending_approvals":
       result = await getApprovals("pending", 25);
