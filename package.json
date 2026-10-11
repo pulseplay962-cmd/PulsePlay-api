@@ -5,7 +5,7 @@
   "scripts": {
     "start": "node server.js",
     "scheduler": "node ./bin/run-scheduler.js",
-    "test": "node --test && node --check server.js && node --check routes/jarvis.js && node --check services/jarvisCore.js && node --check services/jarvisToolPolicy.js"
+    "test": "node --test && node --check server.js && node --check routes/jarvis.js && node --check services/jarvisCore.js && node --check services/jarvisToolPolicy.js && node --check services/jarvisAdminPolicy.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.111.0",
