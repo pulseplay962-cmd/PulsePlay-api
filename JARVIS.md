@@ -2,43 +2,66 @@
 
 PulsePlay JARVIS is the private AI command layer for PulsePlay.
 
-## Phase 1
+## Current foundation
 
 - Protected JARVIS API endpoints
-- OpenAI-powered conversation
-- Supabase long-term memory
-- JARVIS sessions
+- OpenAI-powered conversation with allowlisted read-only function tools
+- Supabase long-term memory and session records
 - Audit logging
 - System health snapshot
-- Foundation for approval-gated tools
+- Persistent memory and approval request endpoints
+- Admin-session-protected HUD endpoints
+
+## Read-only tool registry
+
+The chat model may request only these tools:
+
+- `get_pulseplay_system_status`: reads the API/database/configuration health snapshot.
+- `list_jarvis_memories`: reads stored memories.
+- `list_pending_approvals`: reads pending approval records.
+
+The server validates every requested tool against a fixed allowlist and executes the implementation itself. Tool arguments are parsed as JSON and limits are clamped. Tool calls are audited.
+
+**No tool in this phase can publish content, deploy software, edit production configuration, delete data, approve/reject requests, or execute other state-changing operations.** An approval record represents authorization intent only; it does not trigger execution.
 
 ## Environment
 
 Add these variables to the PulsePlay API service:
 
-- OPENAI_API_KEY
-- SUPABASE_URL
-- SUPABASE_SERVICE_ROLE_KEY
-- JARVIS_API_KEY
-- JARVIS_MODEL (optional; defaults to gpt-4.1-mini)
+- `OPENAI_API_KEY`
+- `SUPABASE_URL`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `JARVIS_API_KEY`
+- `JARVIS_MODEL` (optional; defaults to `gpt-4.1-mini`)
 
-Never expose SUPABASE_SERVICE_ROLE_KEY or JARVIS_API_KEY to the browser.
+Never expose `SUPABASE_SERVICE_ROLE_KEY` or `JARVIS_API_KEY` to the browser.
 
-## Endpoints
+## API-key endpoints
 
-All endpoints require X-Jarvis-Key or Authorization: Bearer with JARVIS_API_KEY.
+These endpoints require `X-Jarvis-Key` or `Authorization: Bearer` with `JARVIS_API_KEY`:
 
-- GET /api/jarvis/health
-- GET /api/jarvis/memory
-- POST /api/jarvis/memory
-- POST /api/jarvis/sessions
-- POST /api/jarvis/chat
+- `GET /api/jarvis/health`
+- `GET /api/jarvis/memory`
+- `POST /api/jarvis/memory`
+- `POST /api/jarvis/sessions`
+- `POST /api/jarvis/chat`
+
+## Admin-session endpoints
+
+These endpoints require a valid Supabase access token:
+
+- `GET /api/jarvis/ui/health`
+- `GET /api/jarvis/ui/memory`
+- `POST /api/jarvis/ui/memory`
+- `GET /api/jarvis/ui/approvals`
+- `POST /api/jarvis/ui/approvals`
+- `POST /api/jarvis/ui/approvals/:id/resolve`
+- `POST /api/jarvis/ui/chat`
 
 ## Next phases
 
-1. Add tool registry and approval queue.
-2. Add PulsePlay status tools.
-3. Add GitHub/Render/Supabase tools.
-4. Build the JARVIS HUD frontend.
-5. Add voice input/output.
-6. Add controlled browser/computer actions.
+1. Add tests and verify read-only tool behavior in a non-production environment.
+2. Add narrowly scoped external integrations (GitHub/Render) as read-only tools.
+3. Add approval-bound execution for specific actions, with validation and audit logging.
+4. Add voice input/output.
+5. Consider controlled browser/computer actions only after tool permissions and auditing are established.
