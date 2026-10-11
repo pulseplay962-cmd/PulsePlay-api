@@ -32,7 +32,25 @@ async function requireSupabaseUser(req, res, next) {
       return res.status(401).json({ success: false, error: "Invalid or expired session." });
     }
 
-    req.jarvisUser = data.user;
+    const user = data.user;
+    const appMetadata = user.app_metadata || {};
+    const metadataRoles = Array.isArray(appMetadata.roles) ? appMetadata.roles : [];
+    const metadataAdmin = appMetadata.role === "admin" || metadataRoles.includes("admin");
+    const allowedUserIds = String(process.env.JARVIS_ADMIN_USER_IDS || "")
+      .split(",").map((value) => value.trim()).filter(Boolean);
+    const allowedEmails = String(process.env.JARVIS_ADMIN_EMAILS || "")
+      .split(",").map((value) => value.trim().toLowerCase()).filter(Boolean);
+    const email = String(user.email || "").trim().toLowerCase();
+    const explicitlyAllowed = allowedUserIds.includes(user.id) || (email && allowedEmails.includes(email));
+
+    if (!metadataAdmin && !explicitlyAllowed) {
+      return res.status(403).json({
+        success: false,
+        error: "JARVIS Command Center access is restricted to authorized administrators."
+      });
+    }
+
+    req.jarvisUser = user;
     next();
   } catch (error) {
     next(error);
