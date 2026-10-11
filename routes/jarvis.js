@@ -20,7 +20,7 @@ const supabaseAuth = createClient(
 async function requireSupabaseUser(req, res, next) {
   try {
     const authorization = req.get("authorization") || "";
-    const token = authorization.replace(/^Bearer\\s+/i, "").trim();
+    const token = authorization.replace(/^Bearer\s+/i, "").trim();
 
     if (!token) {
       return res.status(401).json({ success: false, error: "Authentication required." });
@@ -41,7 +41,7 @@ async function requireSupabaseUser(req, res, next) {
 
 function requireJarvisKey(req, res, next) {
   const expected = process.env.JARVIS_API_KEY;
-  const provided = req.get("x-jarvis-key") || req.get("authorization")?.replace(/^Bearer\\s+/i, "");
+  const provided = req.get("x-jarvis-key") || req.get("authorization")?.replace(/^Bearer\s+/i, "");
 
   if (!expected) {
     return res.status(503).json({ success: false, error: "JARVIS_API_KEY is not configured." });
