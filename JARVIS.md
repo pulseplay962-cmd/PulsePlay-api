@@ -33,6 +33,8 @@ Add these variables to the PulsePlay API service:
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `JARVIS_API_KEY`
 - `JARVIS_MODEL` (optional; defaults to `gpt-4.1-mini`)
+- `JARVIS_ADMIN_USER_IDS` (comma-separated Supabase user UUIDs authorized for HUD endpoints)
+- `JARVIS_ADMIN_EMAILS` (comma-separated email addresses authorized for HUD endpoints)
 
 Never expose `SUPABASE_SERVICE_ROLE_KEY` or `JARVIS_API_KEY` to the browser.
 
@@ -48,7 +50,7 @@ These endpoints require `X-Jarvis-Key` or `Authorization: Bearer` with `JARVIS_A
 
 ## Admin-session endpoints
 
-These endpoints require a valid Supabase access token:
+These endpoints require a valid Supabase access token **and** an admin role in Supabase `app_metadata` (`role: admin` or `roles: [admin]`), or a matching user UUID/email in the server-side `JARVIS_ADMIN_USER_IDS` / `JARVIS_ADMIN_EMAILS` allowlist. If no admin identity matches, the API denies access by default.
 
 - `GET /api/jarvis/ui/health`
 - `GET /api/jarvis/ui/memory`
@@ -60,7 +62,7 @@ These endpoints require a valid Supabase access token:
 
 ## Next phases
 
-1. Add tests and verify read-only tool behavior in a non-production environment.
+1. Expand CI coverage and verify end-to-end read-only tool behavior in a non-production environment.
 2. Add narrowly scoped external integrations (GitHub/Render) as read-only tools.
 3. Add approval-bound execution for specific actions, with validation and audit logging.
 4. Add voice input/output.
