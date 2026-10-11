@@ -250,38 +250,45 @@ export async function chat({ message, history = [], sessionId = null }) {
   });
 
   let toolCallsMade = 0;
-  while (completion.choices?.[0]?.finish_reason === "tool_calls" && toolCallsMade < 3) {
+  let toolRounds = 0;
+  while (completion.choices?.[0]?.finish_reason === "tool_calls" && toolRounds < 2) {
     const assistantMessage = completion.choices[0].message;
     messages.push(assistantMessage);
+    const calls = assistantMessage.tool_calls || [];
 
-    for (const toolCall of (assistantMessage.tool_calls || []).slice(0, 3 - toolCallsMade)) {
+    for (const toolCall of calls) {
       const name = toolCall.function?.name;
       let result;
-      try {
-        result = await runReadOnlyTool(name, toolCall.function?.arguments, sessionId);
-      } catch (error) {
-        result = { error: error instanceof Error ? error.message : "Read-only tool failed." };
+      if (toolCallsMade >= 3) {
+        result = { error: "Read-only tool-call limit reached for this response." };
+      } else {
+        try {
+          result = await runReadOnlyTool(name, toolCall.function?.arguments, sessionId);
+        } catch (error) {
+          result = { error: error instanceof Error ? error.message : "Read-only tool failed." };
+        }
+        toolCallsMade += 1;
       }
       messages.push({
         role: "tool",
         tool_call_id: toolCall.id,
         content: JSON.stringify(result)
       });
-      toolCallsMade += 1;
     }
 
-    if (toolCallsMade >= 3) break;
+    toolRounds += 1;
     completion = await openai.chat.completions.create({
       model,
       messages,
-      tools: READ_ONLY_TOOLS,
-      tool_choice: "auto",
+      ...(toolCallsMade < 3 && toolRounds < 2
+        ? { tools: READ_ONLY_TOOLS, tool_choice: "auto" }
+        : { tool_choice: "none" }),
       temperature: 0.2
     });
   }
 
   const reply = completion.choices?.[0]?.message?.content?.trim() ||
-    "I was unable to produce a response. Please try again.";
+    "I reached the read-only tool limit before generating a final response. Please ask me to summarize the results.";
 
   await audit(sessionId, "chat", "conversation", {
     inputLength: String(message || "").length,
