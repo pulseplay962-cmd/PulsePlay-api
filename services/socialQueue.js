@@ -5,10 +5,6 @@ import {
     markSocialPostPosted
 } from "./facebookService.js";
 
-// =====================================
-// Create Social Queue Post
-// =====================================
-
 export async function createSocialPost({
     newsId,
     platform = "facebook",
@@ -18,14 +14,9 @@ export async function createSocialPost({
     scheduledAt = null
 }) {
     try {
-        console.log(
-            "Creating social queue post:",
-            {
-                newsId,
-                platform,
-                postText
-            }
-        );
+        console.log("Creating social queue post:", {
+            newsId, platform, postText, hasImage: Boolean(imageUrl)
+        });
 
         const { data, error } = await supabase
             .from("social_queue")
@@ -42,50 +33,36 @@ export async function createSocialPost({
             .single();
 
         if (error) {
-            console.error(
-                "SOCIAL QUEUE INSERT ERROR:",
-                error
-            );
-
+            console.error("SOCIAL QUEUE INSERT ERROR:", error);
             throw error;
         }
 
-        console.log(
-            "SOCIAL POST QUEUED:",
-            data.id
-        );
+        console.log("SOCIAL POST QUEUED:", data.id);
 
-        /*
-         * Facebook is published immediately when the direct
-         * Meta integration is configured. The social_queue row
-         * remains our record of the publication.
-         *
-         * The article URL is generated from the published news
-         * record so Facebook visitors land directly on PulsePlay.
-         */
-        if (
-            platform === "facebook" &&
-            isFacebookPublishingEnabled() &&
-            newsId
-        ) {
+        if (platform === "facebook" && isFacebookPublishingEnabled() && newsId) {
             try {
-                const { data:article, error:articleError } = await supabase
+                const { data: article, error: articleError } = await supabase
                     .from("news")
-                    .select("slug, title")
+                    .select("slug, title, image")
                     .eq("id", newsId)
                     .maybeSingle();
 
-                if (articleError) {
-                    throw articleError;
-                }
+                if (articleError) throw articleError;
 
                 const articleUrl = article?.slug
                     ? `https://pulseplay.online/news/${article.slug}`
                     : "";
 
+                // Prefer the queued image, then the article image. The Facebook
+                // service supplies a branded fallback if neither is fetchable.
+                const postImageUrl =
+                    String(imageUrl || "").trim() ||
+                    String(article?.image || "").trim();
+
                 const result = await publishToFacebook({
                     message: postText,
-                    link: articleUrl
+                    link: articleUrl,
+                    imageUrl: postImageUrl
                 });
 
                 await markSocialPostPosted({
@@ -93,34 +70,20 @@ export async function createSocialPost({
                     facebookPostId: result.postId
                 });
 
-                console.log(
-                    "FACEBOOK AUTO-PUBLISH COMPLETE:",
-                    {
-                        socialQueueId: data.id,
-                        newsId,
-                        facebookPostId: result.postId
-                    }
-                );
+                console.log("FACEBOOK AUTO-PUBLISH COMPLETE:", {
+                    socialQueueId: data.id,
+                    newsId,
+                    facebookPostId: result.postId,
+                    attachedImage: Boolean(postImageUrl)
+                });
             } catch (facebookError) {
-                /*
-                 * Keep the queue record as scheduled so a future
-                 * retry worker can publish it without losing the
-                 * original social content.
-                 */
-                console.error(
-                    "FACEBOOK AUTO-PUBLISH FAILED:",
-                    facebookError
-                );
+                console.error("FACEBOOK AUTO-PUBLISH FAILED:", facebookError);
             }
         }
 
         return data;
     } catch (error) {
-        console.error(
-            "SOCIAL QUEUE ERROR:",
-            error
-        );
-
+        console.error("SOCIAL QUEUE ERROR:", error);
         throw error;
     }
 }
