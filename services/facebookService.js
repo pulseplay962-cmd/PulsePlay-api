@@ -46,14 +46,16 @@ export async function publishToFacebook({ message = "", link = "", imageUrl = ""
         : DEFAULT_SOCIAL_IMAGE;
 
     const params = new URLSearchParams();
-    params.set("message", text);
     params.set("access_token", pageAccessToken);
 
     let endpoint;
     if (usableImageUrl) {
+        // Preserve the website click-through when publishing via /photos.
+        params.set("message", link ? `${text}\n\nRead more: ${link}` : text);
         params.set("url", usableImageUrl);
         endpoint = `https://graph.facebook.com/${GRAPH_VERSION}/${pageId}/photos`;
     } else {
+        params.set("message", text);
         if (link) params.set("link", String(link).trim());
         endpoint = `https://graph.facebook.com/${GRAPH_VERSION}/${pageId}/feed`;
     }
