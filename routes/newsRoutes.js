@@ -435,14 +435,15 @@ router.post("/refresh-ai", async (req, res) => {
         const archivedDrafts = await keepOnlyCurrentNewsDrafts(5);
 
         if (imageJobs.length) {
-            Promise.allSettled(imageJobs).then(results => {
-                console.log(
-                    "AI news background image jobs finished:",
-                    results.filter(result => result.status === "fulfilled").length,
-                    "/",
-                    results.length
-                );
-            });
+            // Wait for image generation and database updates before returning the
+            // refreshed drafts, so the admin UI receives their final image_url values.
+            const imageResults = await Promise.allSettled(imageJobs);
+            console.log(
+                "AI news image jobs finished:",
+                imageResults.filter(result => result.status === "fulfilled").length,
+                "/",
+                imageResults.length
+            );
         }
 
         return res.json({
