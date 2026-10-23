@@ -26,7 +26,7 @@ before(async () => {
     if (url.pathname === "/rest/v1/affiliate_links" && req.method === "GET") {
       if (url.searchParams.has("affiliate_url")) {
         const idFilter = url.searchParams.get("id");
-        if (idFilter === "eq.test-link" && url.searchParams.get("status") === "eq.active") {
+        if (idFilter === "eq.test-link") {
           return json(res, 200, [{
             id: "test-link",
             product_id: "test-product",
