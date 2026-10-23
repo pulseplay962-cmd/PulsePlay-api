@@ -24,7 +24,7 @@ before(async () => {
     });
 
     if (url.pathname === "/rest/v1/affiliate_links" && req.method === "GET") {
-      if (url.searchParams.has("affiliate_url")) {
+      if (url.searchParams.get("select")?.includes("affiliate_url")) {
         const idFilter = url.searchParams.get("id");
         if (idFilter === "eq.test-link") {
           return json(res, 200, [{
