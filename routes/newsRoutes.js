@@ -264,14 +264,23 @@ router.post("/refresh-ai", async (req, res) => {
 
         if (queueError) throw queueError;
 
+        // Check published and unpublished news as well as the AI queue.
+        // This prevents a story from being re-created after it leaves the queue.
+        const { data: existingNews, error: newsError } = await supabase
+            .from("news")
+            .select("title, source_url")
+            .limit(2000);
+
+        if (newsError) throw newsError;
+
         const existingTitles = new Set(
-            (existingQueue || [])
+            [...(existingQueue || []), ...(existingNews || [])]
                 .map(item => String(item.title || "").trim())
                 .filter(Boolean)
         );
 
         const existingSourceUrls = new Set(
-            (existingQueue || [])
+            [...(existingQueue || []), ...(existingNews || [])]
                 .map(item => normalizeNewsUrl(item.source_url))
                 .filter(Boolean)
         );

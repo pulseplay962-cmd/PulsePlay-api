@@ -2,9 +2,9 @@
 import dotenv from "dotenv";
 dotenv.config();
 
-// Default to auto-publish unless explicitly disabled
+// Publishing must be explicitly enabled; default to safe, review-first behavior.
 if (typeof process.env.AUTO_PUBLISH === "undefined") {
-  process.env.AUTO_PUBLISH = "true";
+  process.env.AUTO_PUBLISH = "false";
 }
 
 import scheduler from "../services/workers/scheduler.js";
