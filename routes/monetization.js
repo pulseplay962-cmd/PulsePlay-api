@@ -129,6 +129,37 @@ router.get("/go/:id", async (req, res) => {
     }
 });
 
+// Public: expose only active affiliate-link IDs and product IDs so the Store
+// can use the existing tracked redirect without exposing affiliate destinations.
+router.get("/public-links", async (req, res) => {
+    try {
+        const { data: links, error } = await supabase
+            .from("affiliate_links")
+            .select("id, product_id")
+            .eq("status", "active")
+            .not("product_id", "is", null);
+
+        if (error) {
+            console.error("Public affiliate link lookup error:", error);
+            return res.status(500).json({
+                success: false,
+                error: "Unable to load affiliate link mappings."
+            });
+        }
+
+        return res.json({
+            success: true,
+            links: links || []
+        });
+    } catch (error) {
+        console.error("Public affiliate link lookup error:", error);
+        return res.status(500).json({
+            success: false,
+            error: "Unable to load affiliate link mappings."
+        });
+    }
+});
+
 // Admin: list affiliate links for management.
 router.get("/links", requireAdmin, async (req, res) => {
     try {
