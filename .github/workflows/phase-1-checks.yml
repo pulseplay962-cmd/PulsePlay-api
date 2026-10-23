@@ -21,7 +21,7 @@ jobs:
           node-version: 24
           cache: npm
       - name: Install dependencies from lockfile
-        run: npm ci
+        run: npm ci --ignore-scripts
       - name: Check API entry point syntax
         run: node --check server.js
       - name: Check monetization route syntax
