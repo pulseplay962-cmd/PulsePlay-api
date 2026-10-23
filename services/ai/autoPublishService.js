@@ -31,7 +31,7 @@ export async function autoPublishDueAIContent() {
     const { data: items, error } = await supabase
         .from("ai_content_queue")
         .select("*")
-        .eq("status", "pending")
+        .eq("status", "approved")
         .lte("scheduled_date", today)
         .order("scheduled_date", { ascending: true })
         .limit(AUTO_PUBLISH_LIMIT);
@@ -55,24 +55,9 @@ export async function autoPublishDueAIContent() {
         }
 
         try {
-            // Auto-approval is recorded before publication so the normal
-            // publisher service remains the single publishing path.
-            const { error: approveError } = await supabase
-                .from("ai_content_queue")
-                .update({ status: "approved" })
-                .eq("id", item.id)
-                .eq("status", "pending");
-
-            if (approveError) {
-                throw approveError;
-            }
-
-            const approvedItem = {
-                ...item,
-                status: "approved"
-            };
-
-            await publishAIContent(approvedItem);
+            // Only items already approved by a human may be published.
+            // Pending drafts are never promoted automatically.
+            await publishAIContent(item);
             published.push(item.id);
 
             console.log(
@@ -86,10 +71,10 @@ export async function autoPublishDueAIContent() {
                 publishError
             );
 
-            // Return the item to pending so the next scheduler run can retry.
+            // Keep human-approved status so the next scheduler run can retry.
             await supabase
                 .from("ai_content_queue")
-                .update({ status: "pending" })
+                .update({ status: "approved" })
                 .eq("id", item.id);
         }
     }
