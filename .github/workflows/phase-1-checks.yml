@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 jobs:
-  syntax:
+  syntax-and-integration:
     runs-on: ubuntu-latest
     steps:
       - name: Check out source
@@ -20,11 +20,11 @@ jobs:
         with:
           node-version: 24
           cache: npm
-      - name: Install dependencies
-        # The current API package-lock.json is out of sync with package.json.
-        # npm install lets us run code checks while preserving that finding for review.
-        run: npm install
+      - name: Install dependencies from lockfile
+        run: npm ci
       - name: Check API entry point syntax
         run: node --check server.js
       - name: Check monetization route syntax
         run: node --check routes/monetization.js
+      - name: Run isolated affiliate integration checks
+        run: node --test tests/monetization.integration.test.js
