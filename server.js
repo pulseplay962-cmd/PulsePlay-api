@@ -32,7 +32,7 @@ const corsOptions = {
     // blocking the request before it reaches the API.
     origin: true,
     credentials: false,
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
     optionsSuccessStatus: 204
 };
