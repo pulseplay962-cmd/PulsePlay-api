@@ -1,0 +1,50 @@
+name: Security remediation (lockfile only)
+on:
+  push:
+    branches:
+      - security/npm-audit-remediation
+    paths:
+      - package.json
+      - package-lock.json
+      - .github/workflows/security-remediation.yml
+permissions:
+  contents: write
+jobs:
+  remediate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: security/npm-audit-remediation
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Apply compatible security updates to lockfile
+        run: npm audit fix --package-lock-only || true
+      - name: Install exact locked dependency tree
+        run: npm ci --no-audit
+      - name: Check JavaScript syntax
+        run: |
+          find . -path ./node_modules -prune -o -name '*.js' -type f -print0 | xargs -0 -n1 node --check
+      - name: Run tests if defined
+        run: npm test --if-present
+      - name: Report remaining audit findings
+        if: always()
+        run: npm audit --json > npm-audit-report.json || true
+      - name: Commit updated lockfile
+        run: |
+          if ! git diff --quiet -- package-lock.json; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add package-lock.json
+            git commit -m "fix: apply compatible npm security updates"
+            git push
+          fi
+      - name: Upload audit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-audit-report-api
+          path: npm-audit-report.json
+          if-no-files-found: ignore
