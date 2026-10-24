@@ -596,6 +596,13 @@ router.post(
 
         } catch (error) {
 
+            if (error?.code === "DUPLICATE_ARTICLE") {
+                return res.status(409).json({
+                    success: false,
+                    error: error.message
+                });
+            }
+
             console.error(
                 "AI publish route error:",
                 error
