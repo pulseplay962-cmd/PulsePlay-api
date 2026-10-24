@@ -115,18 +115,32 @@ async function withRetry(operation, label, attempts = 2, timeoutMs = 60000) {
 }
 
 function selectWeeklyCandidates(research, existingTitles, existingSourceUrls) {
-    const fresh = research.filter(source => {
+    // Seed the seen sets with saved records, then update them as each candidate
+    // is accepted. This also prevents duplicate items returned in the same
+    // research batch from being queued together.
+    const seenTitles = new Set(existingTitles);
+    const seenSourceUrls = new Set(existingSourceUrls);
+    const fresh = [];
+
+    for (const source of research) {
         const title = String(source.title || "").trim();
+        const normalizedTitle = normalizeNewsTitle(title);
         const sourceUrl = normalizeNewsUrl(source.url);
 
-        return (
-            title &&
-            sourceUrl &&
-            !existingTitles.has(normalizeNewsTitle(title)) &&
-            !isSimilarTitle(title, existingTitles) &&
-            !existingSourceUrls.has(sourceUrl)
-        );
-    });
+        if (
+            !title ||
+            !sourceUrl ||
+            seenTitles.has(normalizedTitle) ||
+            isSimilarTitle(title, seenTitles) ||
+            seenSourceUrls.has(sourceUrl)
+        ) {
+            continue;
+        }
+
+        fresh.push(source);
+        seenTitles.add(normalizedTitle);
+        seenSourceUrls.add(sourceUrl);
+    }
 
     const gaming = fresh.filter(item => item.source_type === "gaming");
     const hardware = fresh.filter(item => item.source_type === "hardware");
