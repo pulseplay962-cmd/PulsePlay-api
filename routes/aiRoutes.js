@@ -51,6 +51,7 @@ const supabase = createClient(
 
 router.get(
     "/queue",
+    requireAdmin,
     async (req, res) => {
 
         try {
@@ -113,6 +114,7 @@ router.get(
 
 router.post(
     "/generate-weekly-save",
+    requireAdmin,
     async (req, res) => {
 
         try {
@@ -149,7 +151,7 @@ router.post(
 // AI GAME RELEASE SCANNER
 // =====================================
 //
-// POST:
+// POST (administrator-only):
 // /api/ai/game-releases/scan
 //
 // Example body:
@@ -169,6 +171,7 @@ router.post(
 
 router.post(
     "/game-releases/scan",
+    requireAdmin,
     async (req, res) => {
 
         try {
@@ -279,6 +282,7 @@ router.post(
 
 router.post(
     "/game-releases/generate",
+    requireAdmin,
     async (req, res) => {
 
         try {
@@ -450,6 +454,7 @@ router.post(
 
 router.post(
     "/image/:id",
+    requireAdmin,
     async (req, res) => {
 
         try {
@@ -526,6 +531,7 @@ router.post(
 
 router.post(
     "/publish/:id",
+    requireAdmin,
     async (req, res) => {
 
         try {
@@ -592,6 +598,13 @@ router.post(
 
         } catch (error) {
 
+            if (error?.code === "DUPLICATE_ARTICLE") {
+                return res.status(409).json({
+                    success: false,
+                    error: error.message
+                });
+            }
+
             console.error(
                 "AI publish route error:",
                 error
@@ -606,6 +619,86 @@ router.post(
 
         }
 
+    }
+);
+
+
+// =====================================
+// Admin queue status and deletion
+// =====================================
+
+router.patch(
+    "/queue/:id/status",
+    requireAdmin,
+    async (req, res) => {
+        try {
+            const { id } = req.params;
+            const { status } = req.body || {};
+
+            // The current admin UI only needs to approve a reviewed item.
+            // Keep this allowlist narrow rather than accepting arbitrary states.
+            if (status !== "approved") {
+                return res.status(400).json({
+                    success: false,
+                    error: "Only approval status updates are supported here."
+                });
+            }
+
+            const { data, error } = await supabase
+                .from("ai_content_queue")
+                .update({ status })
+                .eq("id", id)
+                .select("id, status")
+                .maybeSingle();
+
+            if (error) throw error;
+            if (!data) {
+                return res.status(404).json({
+                    success: false,
+                    error: "AI queue item not found."
+                });
+            }
+
+            return res.json({ success: true, item: data });
+        } catch (error) {
+            console.error("AI queue status update error:", error);
+            return res.status(500).json({
+                success: false,
+                error: error.message || "Unable to update AI queue status."
+            });
+        }
+    }
+);
+
+router.delete(
+    "/queue/:id",
+    requireAdmin,
+    async (req, res) => {
+        try {
+            const { id } = req.params;
+            const { data, error } = await supabase
+                .from("ai_content_queue")
+                .delete()
+                .eq("id", id)
+                .select("id")
+                .maybeSingle();
+
+            if (error) throw error;
+            if (!data) {
+                return res.status(404).json({
+                    success: false,
+                    error: "AI queue item not found."
+                });
+            }
+
+            return res.json({ success: true, deleted: true, id: data.id });
+        } catch (error) {
+            console.error("AI queue delete error:", error);
+            return res.status(500).json({
+                success: false,
+                error: error.message || "Unable to delete AI queue item."
+            });
+        }
     }
 );
 

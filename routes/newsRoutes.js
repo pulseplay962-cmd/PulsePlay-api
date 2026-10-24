@@ -6,6 +6,7 @@ import { createClient } from "@supabase/supabase-js";
 import { createSocialPost } from "../services/socialQueue.js";
 import { researchGamingNews } from "../services/ai/researchService.js";
 import { generateArticle, generateQueueImage } from "../services/ai/contentService.js";
+import { requireAdmin } from "../middleware/adminAuth.js";
 
 console.log("🔥 NEWS ROUTES FILE LOADED");
 
@@ -114,18 +115,32 @@ async function withRetry(operation, label, attempts = 2, timeoutMs = 60000) {
 }
 
 function selectWeeklyCandidates(research, existingTitles, existingSourceUrls) {
-    const fresh = research.filter(source => {
+    // Seed the seen sets with saved records, then update them as each candidate
+    // is accepted. This also prevents duplicate items returned in the same
+    // research batch from being queued together.
+    const seenTitles = new Set(existingTitles);
+    const seenSourceUrls = new Set(existingSourceUrls);
+    const fresh = [];
+
+    for (const source of research) {
         const title = String(source.title || "").trim();
+        const normalizedTitle = normalizeNewsTitle(title);
         const sourceUrl = normalizeNewsUrl(source.url);
 
-        return (
-            title &&
-            sourceUrl &&
-            !existingTitles.has(title) &&
-            !isSimilarTitle(title, existingTitles) &&
-            !existingSourceUrls.has(sourceUrl)
-        );
-    });
+        if (
+            !title ||
+            !sourceUrl ||
+            seenTitles.has(normalizedTitle) ||
+            isSimilarTitle(title, seenTitles) ||
+            seenSourceUrls.has(sourceUrl)
+        ) {
+            continue;
+        }
+
+        fresh.push(source);
+        seenTitles.add(normalizedTitle);
+        seenSourceUrls.add(sourceUrl);
+    }
 
     const gaming = fresh.filter(item => item.source_type === "gaming");
     const hardware = fresh.filter(item => item.source_type === "hardware");
@@ -239,7 +254,7 @@ function buildTestArticle(source, lane, index) {
     };
 }
 
-router.post("/refresh-ai", async (req, res) => {
+router.post("/refresh-ai", requireAdmin, async (req, res) => {
     try {
         const testMode = String(req.query?.test || "").toLowerCase() === "true";
         console.log("=================================");
@@ -256,22 +271,36 @@ router.post("/refresh-ai", async (req, res) => {
             });
         }
 
-        const { data: existingQueue, error: queueError } = await supabase
-            .from("ai_content_queue")
-            .select("title, source_url")
-            .order("created_at", { ascending: false })
-            .limit(2000);
+        const [queueResult, newsResult] = await Promise.all([
+            supabase
+                .from("ai_content_queue")
+                .select("title, source_url")
+                .order("created_at", { ascending: false })
+                .limit(2000),
+            supabase
+                .from("news")
+                .select("title, source_url")
+                .order("created_at", { ascending: false })
+                .limit(2000)
+        ]);
 
-        if (queueError) throw queueError;
+        if (queueResult.error) throw queueResult.error;
+        if (newsResult.error) throw newsResult.error;
 
+        // Compare against both queued drafts and existing site articles, including
+        // archived queue records, so an old story is not silently reintroduced.
+        const knownRecords = [
+            ...(queueResult.data || []),
+            ...(newsResult.data || [])
+        ];
         const existingTitles = new Set(
-            (existingQueue || [])
-                .map(item => String(item.title || "").trim())
+            knownRecords
+                .map(item => normalizeNewsTitle(item.title))
                 .filter(Boolean)
         );
 
         const existingSourceUrls = new Set(
-            (existingQueue || [])
+            knownRecords
                 .map(item => normalizeNewsUrl(item.source_url))
                 .filter(Boolean)
         );
@@ -305,15 +334,14 @@ router.post("/refresh-ai", async (req, res) => {
         }
 
         if (!freshSources.length) {
-            const archived = await keepOnlyCurrentNewsDrafts(5);
             return res.json({
                 success: true,
                 created: 0,
                 researched: research.length,
                 gaming_available: gamingAvailable,
                 hardware_available: hardwareAvailable,
-                archived_drafts: archived,
-                message: "No new gaming or hardware news was found that is not already in the AI queue.",
+                archived_drafts: 0,
+                message: "No new gaming or hardware news was found that is not already in the queue or published news. Existing drafts were left unchanged.",
                 posts: []
             });
         }
@@ -432,7 +460,8 @@ router.post("/refresh-ai", async (req, res) => {
             }
         }
 
-        const archivedDrafts = await keepOnlyCurrentNewsDrafts(5);
+        // Keep older drafts intact; refresh must never silently archive user-reviewable work.
+        const archivedDrafts = 0;
 
         if (imageJobs.length) {
             // Wait for image generation and database updates before returning the
@@ -456,7 +485,7 @@ router.post("/refresh-ai", async (req, res) => {
             hardware_available: hardwareAvailable,
             message:
                 posts.length > 0
-                    ? `Created ${posts.length} fresh gaming/hardware news draft(s) and kept only the newest 5 news drafts.`
+                    ? `Created ${posts.length} fresh gaming/hardware news draft(s); existing drafts were left unchanged.`
                     : "Fresh sources were found, but the AI could not produce complete articles from the available candidates.",
             posts
         });
@@ -470,7 +499,7 @@ router.post("/refresh-ai", async (req, res) => {
     }
 });
 
-router.post("/publish", async (req, res) => {
+router.post("/publish", requireAdmin, async (req, res) => {
     try {
         const {
             title,
