@@ -183,6 +183,69 @@ function normalizeResearchText(text = "") {
 }
 
 
+// Normalize URLs before comparing queued and published content.
+function normalizeQueueSourceUrl(value = "") {
+    try {
+        const parsed = new URL(String(value).trim());
+        [
+            "utm_source", "utm_medium", "utm_campaign", "utm_term",
+            "utm_content", "fbclid", "gclid"
+        ].forEach(key => parsed.searchParams.delete(key));
+        parsed.hash = "";
+        return parsed.toString().replace(/\/$/, "");
+    } catch {
+        return String(value || "").trim().replace(/\/$/, "");
+    }
+}
+
+function queueTitleTokens(value = "") {
+    const ignored = new Set([
+        "a", "an", "and", "are", "as", "at", "be", "by", "for",
+        "from", "how", "in", "is", "it", "of", "on", "or", "the",
+        "to", "with", "your", "you"
+    ]);
+    return new Set(
+        normalizeResearchText(value)
+            .split(" ")
+            .filter(word => word.length > 2 && !ignored.has(word))
+    );
+}
+
+// Returns a reason only for a clear exact-source, exact-title, or strong
+// shared-keyword match. This is a conservative guard, not semantic AI review.
+function findQueueDuplicateReason(post, existingEntries = []) {
+    const sourceUrl = normalizeQueueSourceUrl(post?.source_url || "");
+    const title = normalizeResearchText(post?.title || "");
+    const tokens = queueTitleTokens(post?.title || "");
+
+    for (const existing of existingEntries) {
+        const existingSource = normalizeQueueSourceUrl(existing?.source_url || "");
+        if (sourceUrl && existingSource && sourceUrl === existingSource) {
+            return `source URL already exists (title: "${existing.title || "untitled"}")`;
+        }
+
+        const existingTitle = normalizeResearchText(existing?.title || "");
+        if (title && existingTitle && title === existingTitle) {
+            return `normalized title already exists (title: "${existing.title || "untitled"}")`;
+        }
+
+        const existingTokens = queueTitleTokens(existing?.title || "");
+        if (tokens.size < 5 || existingTokens.size < 5) continue;
+
+        let overlap = 0;
+        for (const token of tokens) {
+            if (existingTokens.has(token)) overlap++;
+        }
+
+        const smallerSetSize = Math.min(tokens.size, existingTokens.size);
+        if (overlap >= 3 && overlap / smallerSetSize >= 0.65) {
+            return `likely near-duplicate title (existing title: "${existing.title || "untitled"}")`;
+        }
+    }
+
+    return null;
+}
+
 // =====================================
 // AI Output Text Cleanup
 // =====================================
@@ -3120,6 +3183,33 @@ export async function generateAndSaveWeeklyContent() {
 
         const savedPosts = [];
 
+        // Read existing queue/news before inserting anything. Fail closed if
+        // either lookup fails so a partial read cannot bypass duplicate checks.
+        const [queueLookup, newsLookup] = await Promise.all([
+            supabase
+                .from("ai_content_queue")
+                .select("title, source_url, status")
+                .limit(2000),
+            supabase
+                .from("news")
+                .select("title, source_url")
+                .limit(2000)
+        ]);
+
+        if (queueLookup.error) {
+            throw new Error(`Unable to check existing AI queue for duplicates: ${queueLookup.error.message}`);
+        }
+        if (newsLookup.error) {
+            throw new Error(`Unable to check existing news for duplicates: ${newsLookup.error.message}`);
+        }
+
+        const activeQueueEntries = (queueLookup.data || []).filter(entry =>
+            ["pending", "approved", "published"].includes(String(entry.status || "").toLowerCase())
+        );
+        const existingEntries = [
+            ...activeQueueEntries,
+            ...(newsLookup.data || [])
+        ];
 
         // =====================================
         // Save To AI Queue
@@ -3128,6 +3218,20 @@ export async function generateAndSaveWeeklyContent() {
         for (
             const post of posts
         ) {
+            const duplicateReason = findQueueDuplicateReason(post, [
+                ...existingEntries,
+                ...savedPosts
+            ]);
+
+            if (duplicateReason) {
+                console.warn(
+                    "SKIPPING DUPLICATE AI QUEUE POST:",
+                    post.title,
+                    "-",
+                    duplicateReason
+                );
+                continue;
+            }
 
             console.log(
                 "Saving weekly post:",
@@ -3243,6 +3347,9 @@ export async function generateAndSaveWeeklyContent() {
             savedPosts.push(
                 data
             );
+
+            // Include this newly saved row in duplicate checks for later posts.
+            existingEntries.push(data);
 
         }
 
