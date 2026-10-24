@@ -308,6 +308,7 @@ if(
 
                 published:true,
 
+                status:"published",
 
 
                 author:
