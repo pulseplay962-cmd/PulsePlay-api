@@ -27,7 +27,35 @@ END
 $migration$;
 
 -- Remove the permissive policies that allow anonymous reads or any signed-in
--- user to insert news. PostgreSQL permissive policies combine with OR.
+-- user to insert news. Older policies in this project may have literal quote
+-- characters in their names, so remove both naming variants explicitly.
+DO $policy_cleanup$
+DECLARE
+  policy_record record;
+BEGIN
+  FOR policy_record IN
+    SELECT policyname
+    FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'news'
+      AND policyname IN (
+        'Allow public read news',
+        '"Allow public read news"',
+        'Allow authenticated insert news',
+        '"Allow authenticated insert news"',
+        'Public can read published news only',
+        'Admins can read all news',
+        'Admins can insert news',
+        'Admins can update news',
+        'Admins can delete news'
+      )
+  LOOP
+    EXECUTE format('DROP POLICY IF EXISTS %I ON public.news', policy_record.policyname);
+  END LOOP;
+END
+$policy_cleanup$;
+
+-- PostgreSQL permissive policies combine with OR.
 DROP POLICY IF EXISTS "Allow public read news" ON public.news;
 DROP POLICY IF EXISTS "Allow authenticated insert news" ON public.news;
 DROP POLICY IF EXISTS "Public can read published news only" ON public.news;
