@@ -171,6 +171,7 @@ router.post(
 
 router.post(
     "/game-releases/scan",
+    requireAdmin,
     async (req, res) => {
 
         try {
@@ -281,6 +282,7 @@ router.post(
 
 router.post(
     "/game-releases/generate",
+    requireAdmin,
     async (req, res) => {
 
         try {
