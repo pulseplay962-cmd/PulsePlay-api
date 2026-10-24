@@ -11,8 +11,8 @@ BEGIN
   INTO inconsistent_count
   FROM public.news
   WHERE NOT (
-    (published IS TRUE AND status = 'published')
-    OR (published IS FALSE AND status = 'draft')
+    (published = 'true' AND status = 'published')
+    OR (published = 'false' AND status = 'draft')
   );
 
   IF inconsistent_count > 0 THEN
@@ -38,7 +38,7 @@ CREATE POLICY "Public can read published news only"
 ON public.news
 FOR SELECT
 TO anon, authenticated
-USING (published IS TRUE AND status = 'published');
+USING (published = 'true' AND status = 'published');
 
 -- Keep drafts visible to authenticated administrators in the admin dashboard.
 CREATE POLICY "Admins can read all news"
