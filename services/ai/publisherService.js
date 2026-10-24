@@ -122,6 +122,37 @@ function normalizeSourceUrl(value = "") {
 }
 
 
+// Normalize titles so punctuation/capitalization differences do not bypass deduplication.
+function normalizeNewsTitle(value = "") {
+    return String(value)
+        .toLowerCase()
+        .replace(/[^a-z0-9\\s]/g, " ")
+        .replace(/\\s+/g, " ")
+        .trim();
+}
+
+function hasNearDuplicateTitle(title, existingTitles) {
+    const words = new Set(normalizeNewsTitle(title).split(" ").filter(word => word.length > 2));
+    if (words.size < 5) return false;
+
+    for (const existingTitle of existingTitles) {
+        const existingWords = new Set(normalizeNewsTitle(existingTitle).split(" ").filter(word => word.length > 2));
+        if (existingWords.size < 5) continue;
+
+        let overlap = 0;
+        for (const word of words) {
+            if (existingWords.has(word)) overlap++;
+        }
+
+        if (overlap / Math.max(words.size, existingWords.size) >= 0.88) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+
 // =====================================
 // Publish AI Content
 // =====================================
@@ -197,26 +228,35 @@ export async function publishAIContent(item){
         // =====================================
 
         const normalizedSourceUrl = normalizeSourceUrl(item.source_url);
-        if (normalizedSourceUrl) {
-            const { data: existingNews, error: existingNewsError } = await supabase
-                .from("news")
-                .select("id, source_url")
-                .not("source_url", "is", null)
-                .limit(2000);
+        const normalizedTitle = normalizeNewsTitle(item.title);
+        const { data: existingNews, error: existingNewsError } = await supabase
+            .from("news")
+            .select("id, title, source_url")
+            .limit(2000);
 
-            if (existingNewsError) {
-                throw existingNewsError;
-            }
+        if (existingNewsError) {
+            throw existingNewsError;
+        }
 
-            const duplicate = (existingNews || []).some(
-                (article) => normalizeSourceUrl(article.source_url) === normalizedSourceUrl
-            );
+        const existingArticles = existingNews || [];
+        const duplicateSource = normalizedSourceUrl && existingArticles.some(
+            article => normalizeSourceUrl(article.source_url) === normalizedSourceUrl
+        );
+        const duplicateTitle = normalizedTitle && existingArticles.some(
+            article => normalizeNewsTitle(article.title) === normalizedTitle
+        );
+        const similarTitle = hasNearDuplicateTitle(
+            item.title,
+            existingArticles.map(article => article.title || "")
+        );
 
-            if (duplicate) {
-                const duplicateError = new Error("An article from this source URL already exists.");
-                duplicateError.code = "DUPLICATE_ARTICLE";
-                throw duplicateError;
-            }
+        if (duplicateSource || duplicateTitle || similarTitle) {
+            const reason = duplicateSource
+                ? "An article from this source URL already exists."
+                : "A news article with the same or a very similar title already exists.";
+            const duplicateError = new Error(reason);
+            duplicateError.code = "DUPLICATE_ARTICLE";
+            throw duplicateError;
         }
 
 
