@@ -471,7 +471,7 @@ router.post("/refresh-ai", requireAdmin, async (req, res) => {
             hardware_available: hardwareAvailable,
             message:
                 posts.length > 0
-                    ? `Created ${posts.length} fresh gaming/hardware news draft(s) and kept only the newest 5 news drafts.`
+                    ? `Created ${posts.length} fresh gaming/hardware news draft(s); existing drafts were left unchanged.`
                     : "Fresh sources were found, but the AI could not produce complete articles from the available candidates.",
             posts
         });
