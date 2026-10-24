@@ -51,6 +51,7 @@ const supabase = createClient(
 
 router.get(
     "/queue",
+    requireAdmin,
     async (req, res) => {
 
         try {
@@ -113,6 +114,7 @@ router.get(
 
 router.post(
     "/generate-weekly-save",
+    requireAdmin,
     async (req, res) => {
 
         try {
@@ -450,6 +452,7 @@ router.post(
 
 router.post(
     "/image/:id",
+    requireAdmin,
     async (req, res) => {
 
         try {
@@ -526,6 +529,7 @@ router.post(
 
 router.post(
     "/publish/:id",
+    requireAdmin,
     async (req, res) => {
 
         try {
