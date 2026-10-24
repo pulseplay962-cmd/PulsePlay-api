@@ -1,9 +1,9 @@
--- PulsePlay AI News Worker: prevent public reads of draft/unpublished articles.
+-- PulsePlay AI News Worker: secure public news reads and administrator writes.
 -- SAFETY GATE: allow consistent published and draft records, but refuse to
 -- apply while the two publication fields disagree or either field is missing.
 -- This migration never modifies article rows or automatically publishes/archives content.
 
-DO $
+DO $migration$
 DECLARE
   inconsistent_count bigint;
 BEGIN
@@ -22,21 +22,75 @@ BEGIN
       (SELECT COUNT(*) FROM public.news);
   END IF;
 END
-$;
+$migration$;
 
+-- Remove the permissive policies that allow anonymous reads or any signed-in
+-- user to insert news. PostgreSQL permissive policies combine with OR.
 DROP POLICY IF EXISTS "Allow public read news" ON public.news;
+DROP POLICY IF EXISTS "Allow authenticated insert news" ON public.news;
+DROP POLICY IF EXISTS "Public can read published news only" ON public.news;
+DROP POLICY IF EXISTS "Admins can read all news" ON public.news;
+DROP POLICY IF EXISTS "Admins can insert news" ON public.news;
+DROP POLICY IF EXISTS "Admins can update news" ON public.news;
+DROP POLICY IF EXISTS "Admins can delete news" ON public.news;
 
 CREATE POLICY "Public can read published news only"
 ON public.news
 FOR SELECT
 TO anon, authenticated
-USING (published = 'true' AND status = 'published');
+USING (published IS TRUE AND status = 'published');
 
--- Keep the admin dashboard able to inspect drafts and inconsistent records.
--- This is a separate permissive policy for authenticated administrators only.
+-- Keep drafts visible to authenticated administrators in the admin dashboard.
 CREATE POLICY "Admins can read all news"
 ON public.news
 FOR SELECT
+TO authenticated
+USING (
+  EXISTS (
+    SELECT 1
+    FROM public.profiles AS profile
+    WHERE profile.id = auth.uid()
+      AND profile.role = 'admin'
+  )
+);
+
+CREATE POLICY "Admins can insert news"
+ON public.news
+FOR INSERT
+TO authenticated
+WITH CHECK (
+  EXISTS (
+    SELECT 1
+    FROM public.profiles AS profile
+    WHERE profile.id = auth.uid()
+      AND profile.role = 'admin'
+  )
+);
+
+CREATE POLICY "Admins can update news"
+ON public.news
+FOR UPDATE
+TO authenticated
+USING (
+  EXISTS (
+    SELECT 1
+    FROM public.profiles AS profile
+    WHERE profile.id = auth.uid()
+      AND profile.role = 'admin'
+  )
+)
+WITH CHECK (
+  EXISTS (
+    SELECT 1
+    FROM public.profiles AS profile
+    WHERE profile.id = auth.uid()
+      AND profile.role = 'admin'
+  )
+);
+
+CREATE POLICY "Admins can delete news"
+ON public.news
+FOR DELETE
 TO authenticated
 USING (
   EXISTS (
