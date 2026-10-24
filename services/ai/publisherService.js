@@ -398,9 +398,11 @@ if(
                 featured:false,
 
 
-                published:"true",
+                // Stage the article as a draft first. It is made public only
+                // after the queue status update succeeds.
+                published:"false",
 
-                status:"published",
+                status:"draft",
 
 
                 author:
@@ -440,10 +442,7 @@ if(
                 source_name:
                 sourceName || "",
 
-                published_at:
-
-                new Date()
-                .toISOString()
+                published_at: null
 
 
 
@@ -484,48 +483,59 @@ if(
         // Update AI Queue
         // =====================================
 
+        if (item.id) {
+            const { data: updatedQueueItem, error: updateError } = await supabase
+                .from("ai_content_queue")
+                .update({
+                    status: "published",
+                    published_at: new Date().toISOString()
+                })
+                .eq("id", item.id)
+                .select("id, status")
+                .maybeSingle();
 
-        if(item.id){
-
-
-            const {error:updateError} =
-
-            await supabase
-
-            .from("ai_content_queue")
-
-            .update({
-
-                status:
-                "published",
-
-
-                published_at:
-
-                new Date()
-                .toISOString()
-
-
-            })
-
-            .eq(
-                "id",
-                item.id
-            );
-
-
-
-            if(updateError){
-
-                console.error(
-                    "QUEUE UPDATE FAILED:",
-                    updateError
+            if (updateError || !updatedQueueItem) {
+                console.error("QUEUE UPDATE FAILED; article remains a draft:", updateError);
+                throw new Error(
+                    "The article was saved as a draft, but its queue status could not be updated. It was not published."
                 );
+            }
+        }
 
+        // Publish only after the queue update succeeds. If this step fails,
+        // best-effort rollback the queue to approved so the item can be reviewed
+        // and retried without leaving a public article behind.
+        const publishedAt = new Date().toISOString();
+        const { data: publishedArticle, error: publishError } = await supabase
+            .from("news")
+            .update({
+                published: "true",
+                status: "published",
+                published_at: publishedAt
+            })
+            .eq("id", article.id)
+            .select()
+            .single();
+
+        if (publishError || !publishedArticle) {
+            if (item.id) {
+                const { error: rollbackError } = await supabase
+                    .from("ai_content_queue")
+                    .update({ status: "approved", published_at: null })
+                    .eq("id", item.id);
+
+                if (rollbackError) {
+                    console.error("QUEUE ROLLBACK FAILED after news publication update error:", rollbackError);
+                }
             }
 
-
+            console.error("NEWS PUBLICATION UPDATE FAILED; article should remain a draft:", publishError);
+            throw new Error(
+                "The queue was updated, but the article could not be published. The queue was returned to approved where possible; verify status before retrying."
+            );
         }
+
+        Object.assign(article, publishedArticle);
 
 
 
