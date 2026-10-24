@@ -358,7 +358,7 @@ if(
                 featured:false,
 
 
-                published:true,
+                published:"true",
 
                 status:"published",
 
