@@ -99,6 +99,30 @@ async function createUniqueSlug(title){
 
 
 // =====================================
+// Normalize source URLs for duplicate checks
+// =====================================
+
+function normalizeSourceUrl(value = "") {
+    try {
+        const parsed = new URL(String(value).trim());
+        [
+            "utm_source",
+            "utm_medium",
+            "utm_campaign",
+            "utm_term",
+            "utm_content",
+            "fbclid",
+            "gclid"
+        ].forEach((key) => parsed.searchParams.delete(key));
+        parsed.hash = "";
+        return parsed.toString().replace(/\/$/, "");
+    } catch {
+        return String(value || "").trim().replace(/\/$/, "");
+    }
+}
+
+
+// =====================================
 // Publish AI Content
 // =====================================
 
@@ -166,6 +190,34 @@ export async function publishAIContent(item){
 
 
 
+
+
+        // =====================================
+        // Prevent duplicate source publication
+        // =====================================
+
+        const normalizedSourceUrl = normalizeSourceUrl(item.source_url);
+        if (normalizedSourceUrl) {
+            const { data: existingNews, error: existingNewsError } = await supabase
+                .from("news")
+                .select("id, source_url")
+                .not("source_url", "is", null)
+                .limit(2000);
+
+            if (existingNewsError) {
+                throw existingNewsError;
+            }
+
+            const duplicate = (existingNews || []).some(
+                (article) => normalizeSourceUrl(article.source_url) === normalizedSourceUrl
+            );
+
+            if (duplicate) {
+                const duplicateError = new Error("An article from this source URL already exists.");
+                duplicateError.code = "DUPLICATE_ARTICLE";
+                throw duplicateError;
+            }
+        }
 
 
         // =====================================
