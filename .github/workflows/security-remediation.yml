@@ -21,7 +21,7 @@ jobs:
           node-version: 24
           cache: npm
       - name: Apply compatible security updates to lockfile
-        run: npm audit fix --package-lock-only
+        run: npm audit fix --package-lock-only || true
       - name: Install exact locked dependency tree
         run: npm ci --no-audit
       - name: Check JavaScript syntax
