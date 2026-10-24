@@ -151,7 +151,7 @@ router.post(
 // AI GAME RELEASE SCANNER
 // =====================================
 //
-// POST:
+// POST (administrator-only):
 // /api/ai/game-releases/scan
 //
 // Example body:
