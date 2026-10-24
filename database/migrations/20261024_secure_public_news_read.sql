@@ -29,3 +29,18 @@ ON public.news
 FOR SELECT
 TO anon, authenticated
 USING (published = 'true' AND status = 'published');
+
+-- Keep the admin dashboard able to inspect drafts and inconsistent records.
+-- This is a separate permissive policy for authenticated administrators only.
+CREATE POLICY "Admins can read all news"
+ON public.news
+FOR SELECT
+TO authenticated
+USING (
+  EXISTS (
+    SELECT 1
+    FROM public.profiles AS profile
+    WHERE profile.id = auth.uid()
+      AND profile.role = 'admin'
+  )
+);
