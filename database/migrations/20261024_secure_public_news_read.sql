@@ -1,26 +1,28 @@
 -- PulsePlay AI News Worker: prevent public reads of draft/unpublished articles.
--- SAFETY GATE: this migration intentionally refuses to apply while publication flags
--- disagree. Reconcile article records first, then rerun this migration.
+-- SAFETY GATE: allow consistent published and draft records, but refuse to
+-- apply while the two publication fields disagree or either field is missing.
 -- This migration never modifies article rows or automatically publishes/archives content.
 
-DO $$
+DO $
 DECLARE
   inconsistent_count bigint;
 BEGIN
   SELECT COUNT(*)
   INTO inconsistent_count
   FROM public.news
-  WHERE published IS DISTINCT FROM 'true'
-     OR status IS DISTINCT FROM 'published';
+  WHERE NOT (
+    (published IS TRUE AND status = 'published')
+    OR (published IS FALSE AND status = 'draft')
+  );
 
   IF inconsistent_count > 0 THEN
     RAISE EXCEPTION
-      'News publication safeguard not applied: % of % rows are not marked published=true AND status=published. Reconcile publication flags first.',
+      'News publication safeguard not applied: % of % rows have inconsistent publication flags. Reconcile those records first.',
       inconsistent_count,
       (SELECT COUNT(*) FROM public.news);
   END IF;
 END
-$$;
+$;
 
 DROP POLICY IF EXISTS "Allow public read news" ON public.news;
 
