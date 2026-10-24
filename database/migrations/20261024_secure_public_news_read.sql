@@ -10,10 +10,12 @@ BEGIN
   SELECT COUNT(*)
   INTO inconsistent_count
   FROM public.news
-  WHERE NOT (
-    (published = 'true' AND status = 'published')
-    OR (published = 'false' AND status = 'draft')
-  );
+  WHERE published IS NULL
+     OR status IS NULL
+     OR NOT (
+       (published = 'true' AND status = 'published')
+       OR (published = 'false' AND status = 'draft')
+     );
 
   IF inconsistent_count > 0 THEN
     RAISE EXCEPTION
