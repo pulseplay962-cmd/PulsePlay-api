@@ -405,28 +405,75 @@ router.get("/stats", requireAdmin, async (req, res) => {
             throw linksError;
         }
 
-        const { data: recentClicks, error: clicksError } = await supabase
+        const thirtyDaysAgo = new Date(
+            Date.now() - 30 * 24 * 60 * 60 * 1000
+        ).toISOString();
+
+        const { data: allAffiliateClicks, error: clicksError } = await supabase
             .from("affiliate_clicks")
             .select("id, affiliate_link_id, product_id, page_path, campaign, created_at")
-            .gte(
-                "created_at",
-                new Date(
-                    Date.now() - 30 * 24 * 60 * 60 * 1000
-                ).toISOString()
-            )
             .order("created_at", { ascending: false })
-            .limit(5000);
+            .limit(10000);
 
         if (clicksError) {
             throw clicksError;
         }
 
+        const { data: storeClickEvents, error: storeClickEventsError } = await supabase
+            .from("analytics_events")
+            .select("id, page_path, content_id, content_title, created_at")
+            .eq("event_type", "affiliate_click")
+            .order("created_at", { ascending: false })
+            .limit(10000);
+
+        if (storeClickEventsError) {
+            throw storeClickEventsError;
+        }
+
+        // Store product links currently log to analytics_events, while the
+        // affiliate redirect logs to affiliate_clicks. Combine both sources
+        // for recent reports and avoid matching the same product/page click
+        // twice when both paths happen to record it within three seconds.
+        const affiliateClicks = allAffiliateClicks || [];
+        const unmatchedStoreClickEvents = (storeClickEvents || []).filter((event) => {
+            if (!event.content_id || !event.created_at) return true;
+            const eventTime = new Date(event.created_at).getTime();
+
+            return !affiliateClicks.some((click) => {
+                if (
+                    click.product_id !== event.content_id ||
+                    (click.page_path || "/") !== (event.page_path || "/") ||
+                    !click.created_at
+                ) {
+                    return false;
+                }
+
+                return Math.abs(
+                    new Date(click.created_at).getTime() - eventTime
+                ) <= 3000;
+            });
+        });
+
+        const recentClicks = [
+            ...affiliateClicks
+                .filter((click) => click.created_at >= thirtyDaysAgo)
+                .map((click) => ({ ...click, source: "affiliate_redirect" })),
+            ...unmatchedStoreClickEvents
+                .filter((event) => event.created_at >= thirtyDaysAgo)
+                .map((event) => ({
+                    id: `analytics-${event.id}`,
+                    affiliate_link_id: null,
+                    product_id: event.content_id,
+                    page_path: event.page_path,
+                    campaign: null,
+                    created_at: event.created_at,
+                    source: "store_analytics",
+                    content_title: event.content_title
+                }))
+        ].sort((a, b) => b.created_at.localeCompare(a.created_at));
+
         // Build a 30-day traffic-to-affiliate view so the admin dashboard
         // can show which pages are turning traffic into affiliate clicks.
-        const thirtyDaysAgo = new Date(
-            Date.now() - 30 * 24 * 60 * 60 * 1000
-        ).toISOString();
-
         const { data: pageViews, error: pageViewsError } = await supabase
             .from("analytics_events")
             .select("page_path, created_at")
@@ -585,10 +632,13 @@ router.get("/stats", requireAdmin, async (req, res) => {
             })
             .slice(0, 50);
 
+        // Link counters represent legacy/all-time redirect clicks. Add
+        // unmatched Store analytics events so direct product links are counted
+        // without adding the redirect event history a second time.
         const totalClicks = (links || []).reduce(
             (sum, item) => sum + Number(item.clicks || 0),
             0
-        );
+        ) + unmatchedStoreClickEvents.length;
 
         const totalConversions = (links || []).reduce(
             (sum, item) => sum + Number(item.conversions || 0),
