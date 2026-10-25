@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "start": "node server.js",
-    "scheduler": "node ./bin/run-scheduler.js"
+    "scheduler": "node ./bin/run-scheduler.js",
+    "test": "node --test"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.111.0",
