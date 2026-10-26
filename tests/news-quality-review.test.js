@@ -39,6 +39,20 @@ test("flags dramatic headlines without asserting that the claim is false", () =>
     assert.equal(result.flags.every(flag => flag.severity === "review"), true);
 });
 
+test("flags headline claims using destroy, destroys, destroyed, or destroying", () => {
+    for (const verb of ["destroy", "destroys", "destroyed", "destroying"]) {
+        const result = assessNewsQuality({
+            title: `Benchmark result ${verb} the previous generation`,
+            summary: usefulSummary,
+            published_at: freshDate
+        }, { now });
+        assert.ok(
+            result.flags.some(flag => flag.code === "strong_headline_claim"),
+            `Expected strong_headline_claim for "${verb}"`
+        );
+    }
+});
+
 test("flags time-sensitive discounts for price verification", () => {
     const result = assessNewsQuality({
         title: "Samsung SSD is 38% off today",
