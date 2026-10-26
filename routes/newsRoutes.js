@@ -9,6 +9,7 @@ import { generateArticle, generateQueueImage } from "../services/ai/contentServi
 import { requireAdmin } from "../middleware/adminAuth.js";
 import { normalizeNewsUrl, normalizeNewsTitle, selectWeeklyCandidates } from "../services/ai/newsDeduplication.js";
 import { assessNewsQuality } from "../services/ai/newsQualityReview.js";
+import { findDuplicateArticle } from "../services/ai/newsPublishingDeduplication.js";
 
 console.log("🔥 NEWS ROUTES FILE LOADED");
 
@@ -464,6 +465,33 @@ router.post("/publish", requireAdmin, async (req, res) => {
             return res.status(400).json({
                 success: false,
                 error: "Title and content are required."
+            });
+        }
+
+        // Apply the same duplicate protection as the AI queue publisher.
+        const { data: existingNews, error: existingNewsError } = await supabase
+            .from("news")
+            .select("id, title, source_url")
+            .limit(2000);
+
+        if (existingNewsError) {
+            console.error("Existing news lookup failed before publish:", existingNewsError);
+            return res.status(500).json({
+                success: false,
+                error: "Unable to verify whether this article already exists."
+            });
+        }
+
+        const duplicate = findDuplicateArticle(
+            { title, source_url: normalizeNewsUrl(source_url || "") },
+            existingNews || []
+        );
+
+        if (duplicate) {
+            return res.status(409).json({
+                success: false,
+                code: duplicate.code,
+                error: duplicate.reason
             });
         }
 
