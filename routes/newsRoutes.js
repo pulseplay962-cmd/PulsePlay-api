@@ -74,61 +74,6 @@ async function withRetry(operation, label, attempts = 2, timeoutMs = 60000) {
     throw lastError;
 }
 
-function selectWeeklyCandidates(research, existingTitles, existingSourceUrls) {
-    // Seed the seen sets with saved records, then update them as each candidate
-    // is accepted. This also prevents duplicate items returned in the same
-    // research batch from being queued together.
-    const seenTitles = new Set(existingTitles);
-    const seenSourceUrls = new Set(existingSourceUrls);
-    const fresh = [];
-
-    for (const source of research) {
-        const title = String(source.title || "").trim();
-        const normalizedTitle = normalizeNewsTitle(title);
-        const sourceUrl = normalizeNewsUrl(source.url);
-
-        if (
-            !title ||
-            !sourceUrl ||
-            seenTitles.has(normalizedTitle) ||
-            isSimilarTitle(title, seenTitles) ||
-            seenSourceUrls.has(sourceUrl)
-        ) {
-            continue;
-        }
-
-        fresh.push(source);
-        seenTitles.add(normalizedTitle);
-        seenSourceUrls.add(sourceUrl);
-    }
-
-    const gaming = fresh.filter(item => item.source_type === "gaming");
-    const hardware = fresh.filter(item => item.source_type === "hardware");
-
-    const selected = [
-        ...gaming.slice(0, 3),
-        ...hardware.slice(0, 2)
-    ];
-
-    if (selected.length < 5) {
-        const selectedUrls = new Set(selected.map(item => normalizeNewsUrl(item.url)));
-        for (const item of fresh) {
-            if (selected.length >= 5) break;
-            const url = normalizeNewsUrl(item.url);
-            if (!selectedUrls.has(url)) {
-                selected.push(item);
-                selectedUrls.add(url);
-            }
-        }
-    }
-
-    return {
-        selected,
-        gamingAvailable: gaming.length,
-        hardwareAvailable: hardware.length
-    };
-}
-
 async function keepOnlyCurrentNewsDrafts(maxDrafts = 5) {
     const { data: drafts, error } = await supabase
         .from("ai_content_queue")
