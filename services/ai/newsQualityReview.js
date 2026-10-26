@@ -55,7 +55,7 @@ export function assessNewsQuality(article = {}, options = {}) {
         flags.push({
             code: "thin_summary",
             severity: "review",
-            message: `Source summary has fewer than ${MIN_SUMMARY_WORDS} words; open the source and verify the headline.`
+            message: `Source summary is shorter than ${MIN_SUMMARY_WORDS} words. Open the original article and verify the key facts before approving; do not fill gaps by guessing.`
         });
     }
 
