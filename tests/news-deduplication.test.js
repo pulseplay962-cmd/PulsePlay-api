@@ -26,9 +26,9 @@ test("limits weekly mix to three gaming and two hardware candidates", () => {
         {title:"Gaming release birch canyon golden meadow details",url:"https://game.test/1",source_type:"gaming"},
         {title:"Gaming release copper forest lunar harbor details",url:"https://game.test/2",source_type:"gaming"},
         {title:"Gaming release dusty ember velvet sunrise details",url:"https://game.test/3",source_type:"gaming"},
-        {title:"Hardware review alpine quartz vivid orchid results",url:"https://hardware.test/0",source_type:"hardware"},
-        {title:"Hardware review bronze willow cosmic lantern results",url:"https://hardware.test/1",source_type:"hardware"},
-        {title:"Hardware review crimson maple silent glacier results",url:"https://hardware.test/2",source_type:"hardware"}
+        {title:"Gaming keyboard review alpine quartz vivid orchid results",url:"https://hardware.test/0",source_type:"hardware"},
+        {title:"Gaming monitor review bronze willow cosmic lantern results",url:"https://hardware.test/1",source_type:"hardware"},
+        {title:"Gaming mouse review crimson maple silent glacier results",url:"https://hardware.test/2",source_type:"hardware"}
     ];
     const result = selectWeeklyCandidates(rows, new Set(), new Set());
     assert.equal(result.selected.length, 5);
@@ -110,4 +110,49 @@ test("unrelated stories remain eligible even when they share generic gaming term
     ];
     const result = selectWeeklyCandidates(rows, new Set(), new Set());
     assert.equal(result.selected.length, 2);
+});
+
+
+test("filters general corporate AI business stories from the hardware lane", () => {
+    const rows = [
+        {
+            title: "Big Tech is cashing in on AI while the rest of corporate America sees no financial returns",
+            summary: "Revenue per employee at the Magnificent Seven has outpaced the S&P 493.",
+            url: "https://example.com/ai-corporate-profits",
+            source_type: "hardware"
+        },
+        {
+            title: "IQUNIX MQ80 low profile mechanical keyboard review",
+            summary: "A low-profile keyboard review focused on switches and typing feel.",
+            url: "https://example.com/keyboard-review",
+            source_type: "hardware"
+        },
+        {
+            title: "New gaming GPU improves ray tracing frame rates",
+            summary: "A graphics card review tests performance in modern games.",
+            url: "https://example.com/gpu-review",
+            source_type: "hardware"
+        }
+    ];
+    const result = selectWeeklyCandidates(rows, new Set(), new Set());
+    assert.equal(result.counts.rejected_off_topic_hardware, 1);
+    assert.equal(result.counts.fresh_candidates, 2);
+    assert.equal(result.selected.length, 2);
+    assert.ok(!result.selected.some(item => item.url === "https://example.com/ai-corporate-profits"));
+    assert.ok(result.selected.some(item => item.url === "https://example.com/keyboard-review"));
+    assert.ok(result.selected.some(item => item.url === "https://example.com/gpu-review"));
+});
+
+test("keeps gaming-related AI hardware coverage eligible", () => {
+    const rows = [
+        {
+            title: "AI upscaling improves frame rates on gaming GPUs",
+            summary: "A graphics technology update focuses on gaming performance.",
+            url: "https://example.com/ai-upscaling-gpu",
+            source_type: "hardware"
+        }
+    ];
+    const result = selectWeeklyCandidates(rows, new Set(), new Set());
+    assert.equal(result.selected.length, 1);
+    assert.equal(result.counts.rejected_off_topic_hardware, 0);
 });

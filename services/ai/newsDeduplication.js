@@ -93,6 +93,16 @@ function selectDiverse(items, limit, alreadySelected = []) {
     return selected;
 }
 
+
+// Keep the hardware lane focused on products and technology that matter to gamers.
+// A publisher's name alone (for example, Tom's Hardware) is not enough to qualify.
+const GAMING_HARDWARE_RELEVANCE = /\b(?:gaming|gamer|graphics card|gpu|video card|cpu|processor|motherboard|ram|ddr[345]|ssd|nvme|storage|pc case|power supply|psu|cooling|cooler|fan|monitor|display|keyboard|mouse|headset|controller|peripheral|mechanical switch|gaming chair|gaming pc|gaming laptop|handheld pc|steam deck|rog ally|legion go|nvidia geforce|amd radeon|intel arc|ray tracing|frame rate|refresh rate|oled|mini led|pc build|desktop pc|laptop|webcam|microphone|capture card)\b/i;
+
+function isRelevantHardwareStory(item) {
+    const text = String(item.title || "") + " " + String(item.summary || "");
+    return GAMING_HARDWARE_RELEVANCE.test(text);
+}
+
 // Daily puzzle answer pages change date and puzzle number, but are still the same
 // recurring content format. Treat those as a family so each day's URL is not
 // automatically considered a fresh story when that format already exists.
@@ -127,6 +137,7 @@ export function selectWeeklyCandidates(research, existingTitles, existingSourceU
         rejected_exact_title: 0,
         rejected_similar_title: 0,
         rejected_recurring_puzzle_format: 0,
+        rejected_off_topic_hardware: 0,
         rejected_duplicate_in_batch: 0
     };
 
@@ -165,15 +176,20 @@ export function selectWeeklyCandidates(research, existingTitles, existingSourceU
         if (puzzleKey) existingPuzzleFamilies.add(puzzleKey);
     }
 
-    const gaming = fresh.filter(item => item.source_type === "gaming");
-    const hardware = fresh.filter(item => item.source_type === "hardware");
+    const eligible = fresh.filter(item => {
+        if (item.source_type !== "hardware" || isRelevantHardwareStory(item)) return true;
+        counts.rejected_off_topic_hardware++;
+        return false;
+    });
+    const gaming = eligible.filter(item => item.source_type === "gaming");
+    const hardware = eligible.filter(item => item.source_type === "hardware");
     const selectedGaming = selectDiverse(gaming, 3);
     const selectedHardware = selectDiverse(hardware, 2, selectedGaming);
     const selected = [...selectedGaming, ...selectedHardware];
 
     if (selected.length < 5) {
         const selectedUrls = new Set(selected.map(item => normalizeNewsUrl(item.url)));
-        for (const item of selectDiverse(fresh, fresh.length, selected)) {
+        for (const item of selectDiverse(eligible, eligible.length, selected)) {
             if (selected.length >= 5) break;
             const url = normalizeNewsUrl(item.url);
             if (!selectedUrls.has(url)) {
@@ -192,7 +208,7 @@ export function selectWeeklyCandidates(research, existingTitles, existingSourceU
             rejected_total: Object.entries(counts)
                 .filter(([key]) => key.startsWith("rejected_"))
                 .reduce((sum, [, value]) => sum + value, 0),
-            fresh_candidates: fresh.length,
+            fresh_candidates: eligible.length,
             selected_candidates: selected.length
         }
     };
