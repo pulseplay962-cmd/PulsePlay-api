@@ -5,11 +5,11 @@
 const DEFAULT_MAX_AGE_DAYS = 7;
 const MIN_SUMMARY_WORDS = 12;
 
-const HIGH_RISK_HEADLINE_TERMS = /\b(?:demise|dead|death|doomed|collapse[sd]?|destroy(?:s|ed|ing)?|shut(?:s|ting)? down|bankrupt(?:cy)?|save the series|industry is over|game changer)\b/i;
-const TIME_SENSITIVE_DEAL_TERMS = /\b(?:\d{1,3}%\s*off|\$\s?\d+(?:\.\d{2})?|deal|discount|sale price|limited time|today only|price drop|save\s+\$)\b/i;
+const HIGH_RISK_HEADLINE_TERMS = /\\b(?:demise|dead|death|doomed|collapse[sd]?|destroy(?:s|ed|ing)?|shut(?:s|ting)? down|bankrupt(?:cy)?|save the series|industry is over|game changer)\\b/i;
+const TIME_SENSITIVE_DEAL_TERMS = /\\b(?:\\d{1,3}%\\s*off|\\$\\s?\\d+(?:\\.\\d{2})?|deal|discount|sale price|limited time|today only|price drop|save\\s+\\$)\\b/i;
 
 function wordCount(value = "") {
-    return String(value).trim().split(/\s+/).filter(Boolean).length;
+    return String(value).trim().split(/\\s+/).filter(Boolean).length;
 }
 
 export function assessNewsQuality(article = {}, options = {}) {
@@ -55,7 +55,7 @@ export function assessNewsQuality(article = {}, options = {}) {
         flags.push({
             code: "thin_summary",
             severity: "review",
-            message: `Source summary has fewer than ${MIN_SUMMARY_WORDS} words; open the source and verify the headline.`
+            message: `Source summary is shorter than ${MIN_SUMMARY_WORDS} words. Open the original article and verify the key facts before approving; do not fill gaps by guessing.`
         });
     }
 
