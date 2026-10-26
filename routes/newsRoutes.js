@@ -210,8 +210,12 @@ router.post("/refresh-ai", requireAdmin, async (req, res) => {
                 .filter(Boolean)
         );
 
-        const { selected: freshSources, gamingAvailable, hardwareAvailable } =
-            selectWeeklyCandidates(research, existingTitles, existingSourceUrls);
+        const {
+            selected: freshSources,
+            gamingAvailable,
+            hardwareAvailable,
+            counts: candidateCounts
+        } = selectWeeklyCandidates(research, existingTitles, existingSourceUrls);
 
         if (testMode) {
             const posts = freshSources.map((source, index) =>
@@ -230,6 +234,10 @@ router.post("/refresh-ai", requireAdmin, async (req, res) => {
                 candidates: freshSources.length,
                 gaming_available: gamingAvailable,
                 hardware_available: hardwareAvailable,
+                deduplication: {
+                    ...candidateCounts,
+                    selected_candidates: freshSources.length
+                },
                 openai_calls: 0,
                 database_writes: 0,
                 published: 0,
@@ -243,6 +251,11 @@ router.post("/refresh-ai", requireAdmin, async (req, res) => {
                 success: true,
                 created: 0,
                 researched: research.length,
+                candidates: freshSources.length,
+                deduplication: {
+                    ...candidateCounts,
+                    selected_candidates: freshSources.length
+                },
                 gaming_available: gamingAvailable,
                 hardware_available: hardwareAvailable,
                 archived_drafts: 0,
@@ -386,6 +399,10 @@ router.post("/refresh-ai", requireAdmin, async (req, res) => {
             archived_drafts: archivedDrafts,
             researched: research.length,
             candidates: freshSources.length,
+            deduplication: {
+                ...candidateCounts,
+                selected_candidates: freshSources.length
+            },
             gaming_available: gamingAvailable,
             hardware_available: hardwareAvailable,
             message:
