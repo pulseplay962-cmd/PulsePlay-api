@@ -8,6 +8,7 @@ import { researchGamingNews } from "../services/ai/researchService.js";
 import { generateArticle, generateQueueImage } from "../services/ai/contentService.js";
 import { requireAdmin } from "../middleware/adminAuth.js";
 import { normalizeNewsUrl, normalizeNewsTitle, selectWeeklyCandidates } from "../services/ai/newsDeduplication.js";
+import { assessNewsQuality } from "../services/ai/newsQualityReview.js";
 
 console.log("🔥 NEWS ROUTES FILE LOADED");
 
@@ -129,6 +130,25 @@ function createTestImage(title) {
     return "data:image/svg+xml;base64," + Buffer.from(svg).toString("base64");
 }
 
+function summarizeNewsQuality(sources = []) {
+    const flagCounts = {};
+    let flaggedStories = 0;
+
+    for (const source of sources) {
+        const review = assessNewsQuality(source);
+        if (review.flagged) flaggedStories++;
+        for (const flag of review.flags) {
+            flagCounts[flag.code] = (flagCounts[flag.code] || 0) + 1;
+        }
+    }
+
+    return {
+        reviewed_stories: sources.length,
+        flagged_stories: flaggedStories,
+        flag_counts: flagCounts
+    };
+}
+
 function buildTestArticle(source, lane, index) {
     const summary = String(source.summary || "No source summary was provided.").trim();
     const sourceName = source.source || "Gaming/technology news feed";
@@ -155,6 +175,7 @@ function buildTestArticle(source, lane, index) {
         status: "test",
         scheduled_date: new Date().toISOString().split("T")[0],
         content_lane: lane,
+        quality_review: assessNewsQuality(source),
         test_mode: true
     };
 }
@@ -238,6 +259,7 @@ router.post("/refresh-ai", requireAdmin, async (req, res) => {
                     ...candidateCounts,
                     selected_candidates: freshSources.length
                 },
+                quality_review: summarizeNewsQuality(freshSources),
                 openai_calls: 0,
                 database_writes: 0,
                 published: 0,
@@ -345,7 +367,8 @@ router.post("/refresh-ai", requireAdmin, async (req, res) => {
 
             posts.push({
                 ...inserted,
-                content_lane: lane
+                content_lane: lane,
+                quality_review: assessNewsQuality(source)
             });
 
             if (!inserted.image_url && normalizedArticle.image_prompt) {
@@ -361,7 +384,8 @@ router.post("/refresh-ai", requireAdmin, async (req, res) => {
                             if (index >= 0) {
                                 posts[index] = {
                                     ...updatedPost,
-                                    content_lane: lane
+                                    content_lane: lane,
+                                    quality_review: assessNewsQuality(source)
                                 };
                             }
                             return updatedPost;
@@ -403,6 +427,7 @@ router.post("/refresh-ai", requireAdmin, async (req, res) => {
                 ...candidateCounts,
                 selected_candidates: freshSources.length
             },
+            quality_review: summarizeNewsQuality(freshSources),
             gaming_available: gamingAvailable,
             hardware_available: hardwareAvailable,
             message:
