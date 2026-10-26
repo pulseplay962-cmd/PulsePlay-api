@@ -7,6 +7,7 @@ import { createSocialPost } from "../services/socialQueue.js";
 import { researchGamingNews } from "../services/ai/researchService.js";
 import { generateArticle, generateQueueImage } from "../services/ai/contentService.js";
 import { requireAdmin } from "../middleware/adminAuth.js";
+import { normalizeNewsUrl, normalizeNewsTitle, selectWeeklyCandidates } from "../services/ai/newsDeduplication.js";
 
 console.log("🔥 NEWS ROUTES FILE LOADED");
 
@@ -23,47 +24,6 @@ const supabase = createClient(
     process.env.SUPABASE_URL,
     process.env.SUPABASE_SERVICE_ROLE_KEY
 );
-
-function normalizeNewsUrl(url = "") {
-    try {
-        const parsed = new URL(String(url).trim());
-        ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "fbclid", "gclid"]
-            .forEach(key => parsed.searchParams.delete(key));
-        parsed.hash = "";
-        return parsed.toString().replace(/\/$/, "");
-    } catch {
-        return String(url || "").trim().replace(/\/$/, "");
-    }
-}
-
-function normalizeNewsTitle(title = "") {
-    return String(title)
-        .toLowerCase()
-        .replace(/[^a-z0-9\s]/g, " ")
-        .replace(/\s+/g, " ")
-        .trim();
-}
-
-function isSimilarTitle(title, existingTitles) {
-    const words = new Set(normalizeNewsTitle(title).split(" ").filter(word => word.length > 2));
-    if (words.size < 5) return false;
-
-    for (const existing of existingTitles) {
-        const existingWords = new Set(normalizeNewsTitle(existing).split(" ").filter(word => word.length > 2));
-        if (existingWords.size < 5) continue;
-
-        let overlap = 0;
-        for (const word of words) {
-            if (existingWords.has(word)) overlap++;
-        }
-
-        if (overlap / Math.max(words.size, existingWords.size) >= 0.88) {
-            return true;
-        }
-    }
-
-    return false;
-}
 
 function isUsableGeneratedArticle(article) {
     const title = String(article?.title || "").trim();
