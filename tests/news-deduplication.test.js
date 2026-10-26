@@ -22,13 +22,13 @@ test("deduplicates candidates within a research batch", () => {
 });
 test("limits weekly mix to three gaming and two hardware candidates", () => {
   const rows = [
-    {title:"Gaming release alpha0 beta0 gamma0 delta0 details",url:"https://game.test/0",source_type:"gaming"},
-    {title:"Gaming release alpha1 beta1 gamma1 delta1 details",url:"https://game.test/1",source_type:"gaming"},
-    {title:"Gaming release alpha2 beta2 gamma2 delta2 details",url:"https://game.test/2",source_type:"gaming"},
-    {title:"Gaming release alpha3 beta3 gamma3 delta3 details",url:"https://game.test/3",source_type:"gaming"},
-    {title:"Hardware review omega0 sigma0 theta0 lambda0 results",url:"https://hardware.test/0",source_type:"hardware"},
-    {title:"Hardware review omega1 sigma1 theta1 lambda1 results",url:"https://hardware.test/1",source_type:"hardware"},
-    {title:"Hardware review omega2 sigma2 theta2 lambda2 results",url:"https://hardware.test/2",source_type:"hardware"}
+    {title:"Gaming release amber comet silver river details",url:"https://game.test/0",source_type:"gaming"},
+    {title:"Gaming release birch canyon golden meadow details",url:"https://game.test/1",source_type:"gaming"},
+    {title:"Gaming release copper forest lunar harbor details",url:"https://game.test/2",source_type:"gaming"},
+    {title:"Gaming release dusty ember velvet sunrise details",url:"https://game.test/3",source_type:"gaming"},
+    {title:"Hardware review alpine quartz vivid orchid results",url:"https://hardware.test/0",source_type:"hardware"},
+    {title:"Hardware review bronze willow cosmic lantern results",url:"https://hardware.test/1",source_type:"hardware"},
+    {title:"Hardware review crimson maple silent glacier results",url:"https://hardware.test/2",source_type:"hardware"}
   ];
   const result = selectWeeklyCandidates(rows, new Set(), new Set());
   assert.equal(result.selected.length, 5);
