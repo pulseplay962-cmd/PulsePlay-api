@@ -72,3 +72,42 @@ test("reports why candidates were rejected and how many were selected", () => {
     assert.equal(result.counts.fresh_candidates, 1);
     assert.equal(result.counts.selected_candidates, 1);
 });
+
+
+test("prefers a distinct gaming topic over a second BioWare story when alternatives exist", () => {
+    const rows = [
+        { title: "Almost 200000 Mass Effect fans sign petition to save the series after BioWare demise", url: "https://example.com/mass-effect-petition", source_type: "gaming" },
+        { title: "Commander Shepard actors Jennifer Hale and Mark Meer mourn BioWare after studio news", url: "https://example.com/actors-mourn-bioware", source_type: "gaming" },
+        { title: "Indies and non sequels have exploded in the last year", url: "https://example.com/indie-growth", source_type: "gaming" },
+        { title: "New fantasy adventure reveals its first gameplay trailer", url: "https://example.com/fantasy-adventure", source_type: "gaming" },
+        { title: "Handheld gaming PC battery tests show a major improvement", url: "https://example.com/handheld-battery", source_type: "hardware" },
+        { title: "Mechanical keyboard review highlights quiet switches", url: "https://example.com/keyboard-review", source_type: "hardware" }
+    ];
+    const result = selectWeeklyCandidates(rows, new Set(), new Set());
+    assert.equal(result.selected.length, 5);
+    assert.ok(result.selected.some(item => item.url === "https://example.com/mass-effect-petition"));
+    assert.ok(result.selected.some(item => item.url === "https://example.com/indie-growth"));
+    assert.ok(!result.selected.some(item => item.url === "https://example.com/actors-mourn-bioware"));
+    assert.equal(result.selected.filter(item => item.source_type === "gaming").length, 3);
+    assert.equal(result.selected.filter(item => item.source_type === "hardware").length, 2);
+});
+
+test("keeps related follow-up coverage eligible when there are not enough alternatives", () => {
+    const rows = [
+        { title: "Mass Effect fans sign petition after BioWare news", url: "https://example.com/mass-effect-petition", source_type: "gaming" },
+        { title: "BioWare veterans respond to Mass Effect fan petition", url: "https://example.com/bioware-response", source_type: "gaming" }
+    ];
+    const result = selectWeeklyCandidates(rows, new Set(), new Set());
+    assert.equal(result.selected.length, 2);
+    assert.ok(result.selected.some(item => item.url === "https://example.com/mass-effect-petition"));
+    assert.ok(result.selected.some(item => item.url === "https://example.com/bioware-response"));
+});
+
+test("unrelated stories remain eligible even when they share generic gaming terms", () => {
+    const rows = [
+        { title: "PlayStation game update improves accessibility settings", url: "https://example.com/accessibility", source_type: "gaming" },
+        { title: "PlayStation game release adds a new co-op mode", url: "https://example.com/coop", source_type: "gaming" }
+    ];
+    const result = selectWeeklyCandidates(rows, new Set(), new Set());
+    assert.equal(result.selected.length, 2);
+});

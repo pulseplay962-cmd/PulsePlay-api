@@ -34,6 +34,65 @@ function isSimilarTitle(title, existingTitles) {
     return false;
 }
 
+// Terms that commonly appear across otherwise unrelated gaming or hardware stories.
+// Ignoring these keeps broad platform/format coverage from dominating topic matching.
+const TOPIC_STOP_WORDS = new Set([
+    "about", "after", "again", "almost", "also", "amid", "announced", "another",
+    "around", "before", "being", "best", "big", "brings", "could", "details",
+    "first", "found", "from", "game", "games", "gaming", "gets", "here", "into",
+    "just", "last", "latest", "more", "most", "new", "news", "now", "official",
+    "over", "reveals", "review", "reviews", "series", "shows", "today", "update",
+    "updates", "what", "when", "while", "with", "years", "your",
+    "playstation", "xbox", "nintendo", "steam", "sony", "microsoft", "epic"
+]);
+
+function topicTerms(title = "") {
+    return new Set(
+        normalizeNewsTitle(title)
+            .split(" ")
+            .filter(word => word.length > 3 && !TOPIC_STOP_WORDS.has(word))
+    );
+}
+
+function sharesTopic(candidate, selected) {
+    const candidateTerms = topicTerms(candidate.title);
+    if (!candidateTerms.size) return false;
+
+    return selected.some(item => {
+        const selectedTerms = topicTerms(item.title);
+        for (const term of candidateTerms) {
+            if (selectedTerms.has(term)) return true;
+        }
+        return false;
+    });
+}
+
+// Prefer distinct topics when building the weekly batch, but only as a selection
+// preference: if there are not enough unrelated candidates, related follow-up
+// coverage remains eligible rather than being discarded as a duplicate.
+function selectDiverse(items, limit, alreadySelected = []) {
+    const preferred = [];
+    const deferred = [];
+
+    for (const item of items) {
+        const target = sharesTopic(item, [...alreadySelected, ...preferred]) ? deferred : preferred;
+        if (preferred.length < limit) {
+            target.push(item);
+        } else {
+            deferred.push(item);
+        }
+    }
+
+    const selected = preferred.slice(0, limit);
+    if (selected.length < limit) {
+        for (const item of [...preferred.slice(limit), ...deferred]) {
+            if (selected.length >= limit) break;
+            if (!selected.includes(item)) selected.push(item);
+        }
+    }
+    return selected;
+}
+
 // Daily puzzle answer pages change date and puzzle number, but are still the same
 // recurring content format. Treat those as a family so each day's URL is not
 // automatically considered a fresh story when that format already exists.
@@ -108,11 +167,13 @@ export function selectWeeklyCandidates(research, existingTitles, existingSourceU
 
     const gaming = fresh.filter(item => item.source_type === "gaming");
     const hardware = fresh.filter(item => item.source_type === "hardware");
-    const selected = [...gaming.slice(0, 3), ...hardware.slice(0, 2)];
+    const selectedGaming = selectDiverse(gaming, 3);
+    const selectedHardware = selectDiverse(hardware, 2, selectedGaming);
+    const selected = [...selectedGaming, ...selectedHardware];
 
     if (selected.length < 5) {
         const selectedUrls = new Set(selected.map(item => normalizeNewsUrl(item.url)));
-        for (const item of fresh) {
+        for (const item of selectDiverse(fresh, fresh.length, selected)) {
             if (selected.length >= 5) break;
             const url = normalizeNewsUrl(item.url);
             if (!selectedUrls.has(url)) {
