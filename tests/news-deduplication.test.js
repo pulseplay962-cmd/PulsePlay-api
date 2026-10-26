@@ -64,7 +64,7 @@ test("reports why candidates were rejected and how many were selected", () => {
             {title:"Brand new gaming release arrives this week",url:"https://example.com/fresh?utm_source=rss",source_type:"gaming"}
         ],
         new Set(["a known story title"]),
-        new Set(["https://example.com/known"])
+        new Set()
     );
     assert.equal(result.counts.researched, 3);
     assert.equal(result.counts.rejected_exact_title, 1);
