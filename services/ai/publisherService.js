@@ -8,7 +8,6 @@ import {
 
 import { applyAmazonAffiliate } from "../affiliate.js";
 import { findDuplicateArticle } from "./newsPublishingDeduplication.js";
-import { normalizeNewsUrl } from "./newsDeduplication.js";
 
 
 
