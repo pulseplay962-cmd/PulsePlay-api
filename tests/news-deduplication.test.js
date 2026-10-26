@@ -26,9 +26,9 @@ test("limits weekly mix to three gaming and two hardware candidates", () => {
         {title:"Gaming release birch canyon golden meadow details",url:"https://game.test/1",source_type:"gaming"},
         {title:"Gaming release copper forest lunar harbor details",url:"https://game.test/2",source_type:"gaming"},
         {title:"Gaming release dusty ember velvet sunrise details",url:"https://game.test/3",source_type:"gaming"},
-        {title:"Hardware review alpine quartz vivid orchid results",url:"https://hardware.test/0",source_type:"hardware"},
-        {title:"Hardware review bronze willow cosmic lantern results",url:"https://hardware.test/1",source_type:"hardware"},
-        {title:"Hardware review crimson maple silent glacier results",url:"https://hardware.test/2",source_type:"hardware"}
+        {title:"Gaming keyboard review alpine quartz vivid orchid results",url:"https://hardware.test/0",source_type:"hardware"},
+        {title:"Gaming monitor review bronze willow cosmic lantern results",url:"https://hardware.test/1",source_type:"hardware"},
+        {title:"Gaming mouse review crimson maple silent glacier results",url:"https://hardware.test/2",source_type:"hardware"}
     ];
     const result = selectWeeklyCandidates(rows, new Set(), new Set());
     assert.equal(result.selected.length, 5);
