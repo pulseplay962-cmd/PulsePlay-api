@@ -55,6 +55,8 @@ export function recurringPuzzleKey(title = "") {
 export function selectWeeklyCandidates(research, existingTitles, existingSourceUrls) {
     const seenTitles = new Set([...existingTitles].map(normalizeNewsTitle).filter(Boolean));
     const seenSourceUrls = new Set([...existingSourceUrls].map(normalizeNewsUrl).filter(Boolean));
+    const databaseTitles = new Set(seenTitles);
+    const databaseSourceUrls = new Set(seenSourceUrls);
     const existingPuzzleFamilies = new Set(
         [...seenTitles].map(recurringPuzzleKey).filter(Boolean)
     );
@@ -79,11 +81,13 @@ export function selectWeeklyCandidates(research, existingTitles, existingSourceU
             continue;
         }
         if (seenSourceUrls.has(sourceUrl)) {
-            counts.rejected_duplicate_url++;
+            if (databaseSourceUrls.has(sourceUrl)) counts.rejected_duplicate_url++;
+            else counts.rejected_duplicate_in_batch++;
             continue;
         }
         if (seenTitles.has(normalizedTitle)) {
-            counts.rejected_exact_title++;
+            if (databaseTitles.has(normalizedTitle)) counts.rejected_exact_title++;
+            else counts.rejected_duplicate_in_batch++;
             continue;
         }
         if (isSimilarTitle(title, seenTitles)) {
@@ -97,10 +101,6 @@ export function selectWeeklyCandidates(research, existingTitles, existingSourceU
         }
 
         fresh.push(source);
-        if (seenTitles.has(normalizedTitle) || seenSourceUrls.has(sourceUrl)) {
-            counts.rejected_duplicate_in_batch++;
-            continue;
-        }
         seenTitles.add(normalizedTitle);
         seenSourceUrls.add(sourceUrl);
         if (puzzleKey) existingPuzzleFamilies.add(puzzleKey);
