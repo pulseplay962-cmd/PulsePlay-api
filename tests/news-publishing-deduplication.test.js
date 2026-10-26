@@ -21,8 +21,8 @@ test("detects exact titles despite punctuation and capitalization differences", 
 
 test("detects near-duplicate titles with minor wording differences", () => {
     const result = findDuplicateArticle(
-        { title: "Studio announces major update for popular fantasy adventure game", source_url: "https://example.com/new" },
-        [{ title: "Studio announces a major update for popular fantasy adventure game", source_url: "https://example.com/old" }]
+        { title: "Studio announces a major update for the popular fantasy adventure game coming to consoles next month", source_url: "https://example.com/new" },
+        [{ title: "Studio announces a major update for the popular fantasy adventure game coming to consoles next week", source_url: "https://example.com/old" }]
     );
     assert.equal(result?.match, "similar_title");
 });
