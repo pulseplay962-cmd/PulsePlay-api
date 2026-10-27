@@ -105,6 +105,8 @@ async function createUniqueSlug(title){
 
 export async function publishAIContent(item){
 
+    let queueClaimed = false;
+    let stagedArticleId = null;
 
     try{
 
@@ -149,16 +151,26 @@ export async function publishAIContent(item){
 
 
 
-            if(
-                queueItem?.status === "published"
-            ){
-
-                throw new Error(
-                    "This content has already been published"
-                );
-
+            if (queueItem?.status === "published") {
+                throw new Error("This content has already been published");
+            }
+            if (queueItem?.status !== "approved") {
+                throw new Error("This content is not approved or is already being processed.");
             }
 
+            // Atomically claim this queue item so concurrent requests cannot both publish it.
+            const { data: claimedItem, error: claimError } = await supabase
+                .from("ai_content_queue")
+                .update({ status: "publishing" })
+                .eq("id", item.id)
+                .eq("status", "approved")
+                .select("id")
+                .maybeSingle();
+            if (claimError) throw claimError;
+            if (!claimedItem) {
+                throw new Error("This content is already being processed or is no longer approved.");
+            }
+            queueClaimed = true;
 
         }
 
@@ -173,18 +185,23 @@ export async function publishAIContent(item){
         // Prevent duplicate source publication
         // =====================================
 
-        const { data: existingNews, error: existingNewsError } = await supabase
-            .from("news")
-            .select("id, title, source_url")
-            .limit(2000);
-
-        if (existingNewsError) {
-            throw existingNewsError;
+        // Read the full news table in bounded pages; a fixed 2,000-row limit
+        // can miss older articles as the site grows.
+        const existingNews = [];
+        const pageSize = 1000;
+        for (let offset = 0; ; offset += pageSize) {
+            const { data: page, error: pageError } = await supabase
+                .from("news")
+                .select("id, title, source_url")
+                .range(offset, offset + pageSize - 1);
+            if (pageError) throw pageError;
+            existingNews.push(...(page || []));
+            if (!page || page.length < pageSize) break;
         }
 
         const duplicate = findDuplicateArticle(
             { title: item.title, source_url: item.source_url },
-            existingNews || []
+            existingNews
         );
 
         if (duplicate) {
@@ -393,18 +410,12 @@ if(
 
 
         if(error){
-
-
-            console.error(
-                "NEWS INSERT ERROR:",
-                error
-            );
-
-
+            console.error("NEWS INSERT ERROR:", error);
             throw error;
-
-
         }
+
+        // Track this attempt's draft for cleanup if a later step fails.
+        stagedArticleId = article.id;
 
 
 
@@ -470,6 +481,8 @@ if(
         }
 
         Object.assign(article, publishedArticle);
+        stagedArticleId = null;
+        queueClaimed = false;
 
 
 
@@ -597,16 +610,29 @@ return {
 
 }catch(error){
 
+    // Remove only this attempt's staged draft if publication did not complete.
+    if (stagedArticleId) {
+        const { error: cleanupError } = await supabase
+            .from("news")
+            .delete()
+            .eq("id", stagedArticleId)
+            .eq("status", "draft")
+            .eq("published", "false");
+        if (cleanupError) console.error("FAILED TO CLEAN UP STAGED NEWS DRAFT:", cleanupError);
+    }
 
-    console.error(
-        "PUBLISH SERVICE ERROR:",
-        error
-    );
+    // Release a claimed queue item after failure so an administrator can retry.
+    if (queueClaimed && item?.id) {
+        const { error: releaseError } = await supabase
+            .from("ai_content_queue")
+            .update({ status: "approved" })
+            .eq("id", item.id)
+            .eq("status", "publishing");
+        if (releaseError) console.error("FAILED TO RELEASE AI QUEUE CLAIM:", releaseError);
+    }
 
-
+    console.error("PUBLISH SERVICE ERROR:", error);
     throw error;
-
-
 }
 
 }
