@@ -777,7 +777,7 @@ router.patch(
                 .from("ai_content_queue")
                 .update({ status })
                 .eq("id", id)
-                .eq("status", "pending")
+                .in("status", ["pending", "draft"])
                 .select("id, status")
                 .maybeSingle();
 
@@ -799,7 +799,7 @@ router.patch(
 
                 return res.status(409).json({
                     success: false,
-                    error: `Only pending content can be approved. Current status: ${existing.status}.`
+                    error: `Only pending or draft content can be approved. Current status: ${existing.status}.`
                 });
             }
 
