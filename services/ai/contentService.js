@@ -3144,6 +3144,30 @@ export async function generateQueueImage(item) {
 
 }
 
+// Read every row in bounded pages so duplicate checks remain complete as
+// the queue and published-news tables grow beyond the API page-size limit.
+async function fetchAllDuplicateCheckRows(table, columns) {
+    const rows = [];
+    const pageSize = 1000;
+
+    for (let offset = 0; ; offset += pageSize) {
+        const { data, error } = await supabase
+            .from(table)
+            .select(columns)
+            .order("id", { ascending: true })
+            .range(offset, offset + pageSize - 1);
+
+        if (error) {
+            throw new Error(`Unable to check ${table} for duplicates: ${error.message}`);
+        }
+
+        rows.push(...(data || []));
+        if (!data || data.length < pageSize) break;
+    }
+
+    return rows;
+}
+
 // =====================================
 // Generate And Save Weekly Content
 // =====================================
@@ -3183,32 +3207,19 @@ export async function generateAndSaveWeeklyContent() {
 
         const savedPosts = [];
 
-        // Read existing queue/news before inserting anything. Fail closed if
-        // either lookup fails so a partial read cannot bypass duplicate checks.
-        const [queueLookup, newsLookup] = await Promise.all([
-            supabase
-                .from("ai_content_queue")
-                .select("title, source_url, status")
-                .limit(2000),
-            supabase
-                .from("news")
-                .select("title, source_url")
-                .limit(2000)
+        // Read all existing queue/news rows before inserting anything. If either
+        // lookup fails, stop rather than allowing an incomplete duplicate check.
+        const [queueRows, newsRows] = await Promise.all([
+            fetchAllDuplicateCheckRows("ai_content_queue", "id, title, source_url, status"),
+            fetchAllDuplicateCheckRows("news", "id, title, source_url")
         ]);
 
-        if (queueLookup.error) {
-            throw new Error(`Unable to check existing AI queue for duplicates: ${queueLookup.error.message}`);
-        }
-        if (newsLookup.error) {
-            throw new Error(`Unable to check existing news for duplicates: ${newsLookup.error.message}`);
-        }
-
-        const activeQueueEntries = (queueLookup.data || []).filter(entry =>
-            ["pending", "approved", "published"].includes(String(entry.status || "").toLowerCase())
+        const activeQueueEntries = queueRows.filter(entry =>
+            ["pending", "approved", "published", "publishing"].includes(String(entry.status || "").toLowerCase())
         );
         const existingEntries = [
             ...activeQueueEntries,
-            ...(newsLookup.data || [])
+            ...newsRows
         ];
 
         // =====================================
