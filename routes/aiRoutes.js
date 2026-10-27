@@ -624,6 +624,133 @@ router.post(
 
 
 // =====================================
+// Edit AI queue draft content
+// =====================================
+
+router.patch(
+    "/queue/:id/edit",
+    requireAdmin,
+    async (req, res) => {
+        try {
+            const { id } = req.params;
+            const body = req.body || {};
+            const allowedFields = [
+                "title",
+                "body",
+                "social_caption",
+                "image_prompt",
+                "scheduled_date"
+            ];
+            const updates = {};
+
+            for (const field of allowedFields) {
+                if (Object.prototype.hasOwnProperty.call(body, field)) {
+                    updates[field] = body[field];
+                }
+            }
+
+            if (Object.keys(updates).length === 0) {
+                return res.status(400).json({
+                    success: false,
+                    error: "No editable article fields were provided."
+                });
+            }
+
+            if (
+                Object.prototype.hasOwnProperty.call(updates, "title") &&
+                (typeof updates.title !== "string" || !updates.title.trim() || updates.title.length > 300)
+            ) {
+                return res.status(400).json({
+                    success: false,
+                    error: "Title is required and must be 300 characters or fewer."
+                });
+            }
+
+            if (
+                Object.prototype.hasOwnProperty.call(updates, "body") &&
+                (typeof updates.body !== "string" || !updates.body.trim() || updates.body.length > 100000)
+            ) {
+                return res.status(400).json({
+                    success: false,
+                    error: "Article content is required and must be 100,000 characters or fewer."
+                });
+            }
+
+            for (const field of ["social_caption", "image_prompt"]) {
+                if (
+                    Object.prototype.hasOwnProperty.call(updates, field) &&
+                    updates[field] !== null &&
+                    typeof updates[field] !== "string"
+                ) {
+                    return res.status(400).json({
+                        success: false,
+                        error: field + " must be text."
+                    });
+                }
+            }
+
+            if (Object.prototype.hasOwnProperty.call(updates, "scheduled_date")) {
+                const value = updates.scheduled_date;
+                if (value !== null && value !== "" && (
+                    typeof value !== "string" || Number.isNaN(Date.parse(value))
+                )) {
+                    return res.status(400).json({
+                        success: false,
+                        error: "Scheduled date must be a valid date."
+                    });
+                }
+                if (value === "") updates.scheduled_date = null;
+            }
+
+            const { data: existing, error: fetchError } = await supabase
+                .from("ai_content_queue")
+                .select("id, status")
+                .eq("id", id)
+                .maybeSingle();
+
+            if (fetchError) throw fetchError;
+            if (!existing) {
+                return res.status(404).json({
+                    success: false,
+                    error: "AI queue item not found."
+                });
+            }
+
+            if (existing.status === "published") {
+                return res.status(409).json({
+                    success: false,
+                    error: "Published content cannot be edited from the AI queue."
+                });
+            }
+
+            const { data, error } = await supabase
+                .from("ai_content_queue")
+                .update(updates)
+                .eq("id", id)
+                .select("*")
+                .maybeSingle();
+
+            if (error) throw error;
+            if (!data) {
+                return res.status(404).json({
+                    success: false,
+                    error: "AI queue item not found."
+                });
+            }
+
+            return res.json({ success: true, item: data });
+        } catch (error) {
+            console.error("AI queue edit error:", error);
+            return res.status(500).json({
+                success: false,
+                error: error.message || "Unable to save AI content edits."
+            });
+        }
+    }
+);
+
+
+// =====================================
 // Admin queue status and deletion
 // =====================================
 
