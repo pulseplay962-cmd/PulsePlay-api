@@ -13,6 +13,7 @@ import stripeWebhookRoutes from "./routes/stripeWebhook.js";
 import monetizationRoutes from "./routes/monetization.js";
 import recommendationsRoutes from "./routes/recommendations.js";
 import streamClipsRoutes from "./routes/streamClips.js";
+import podConceptRoutes from "./routes/podConceptRoutes.js";
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -75,6 +76,7 @@ console.log("Loading affiliate recommendation routes...");
 app.use("/api/recommendations", recommendationsRoutes);
 
 app.use("/api/ai/stream-clips", streamClipsRoutes);
+app.use("/api/ai/pod/concepts", podConceptRoutes);
 
 console.log("Affiliate recommendation routes mounted at /api/recommendations");
 console.log("Printful routes mounted at /api/printful");
