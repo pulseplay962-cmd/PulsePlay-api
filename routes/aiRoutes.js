@@ -771,18 +771,35 @@ router.patch(
                 });
             }
 
+            // Compare-and-set only from pending. This prevents stale admin
+            // requests from re-approving published or actively publishing items.
             const { data, error } = await supabase
                 .from("ai_content_queue")
                 .update({ status })
                 .eq("id", id)
+                .eq("status", "pending")
                 .select("id, status")
                 .maybeSingle();
 
             if (error) throw error;
             if (!data) {
-                return res.status(404).json({
+                const { data: existing, error: lookupError } = await supabase
+                    .from("ai_content_queue")
+                    .select("id, status")
+                    .eq("id", id)
+                    .maybeSingle();
+
+                if (lookupError) throw lookupError;
+                if (!existing) {
+                    return res.status(404).json({
+                        success: false,
+                        error: "AI queue item not found."
+                    });
+                }
+
+                return res.status(409).json({
                     success: false,
-                    error: "AI queue item not found."
+                    error: `Only pending content can be approved. Current status: ${existing.status}.`
                 });
             }
 
