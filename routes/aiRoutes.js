@@ -31,6 +31,10 @@ import {
     publishGamePackage
 } from "../services/ai/gamePublisherService.js";
 
+import {
+    generatePODDesignPreview
+} from "../services/pod/podPreviewService.js";
+
 
 const router = express.Router();
 
