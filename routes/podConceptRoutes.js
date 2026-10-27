@@ -67,6 +67,7 @@ router.post("/", async (req, res) => {
   const id = randomUUID();
   const path = `${req.user.id}/${id}.${extension}`;
   let uploaded = false;
+  let conceptInserted = false;
   try {
     const { error: uploadError } = await supabase.storage
       .from(BUCKET)
@@ -84,6 +85,7 @@ router.post("/", async (req, res) => {
       .select("*")
       .single();
     if (insertError) throw insertError;
+    conceptInserted = true;
 
     const { error: eventError } = await supabase.from("pod_design_concept_events").insert({
       concept_id: id, actor_id: req.user.id, event_type: "created",
@@ -91,13 +93,17 @@ router.post("/", async (req, res) => {
     });
     if (eventError) {
       // Roll back the concept and artwork if its required audit record failed.
-      await supabase.from("pod_design_concepts").delete().eq("id", id);
       throw eventError;
     }
 
-    return res.status(201).json({ success: true, concept: await signedConcept(concept) });
+    const responseConcept = await signedConcept(concept);
+    return res.status(201).json({ success: true, concept: responseConcept });
   } catch (error) {
     console.error("POD concept save failed:", error);
+    if (conceptInserted) {
+      await supabase.from("pod_design_concept_events").delete().eq("concept_id", id);
+      await supabase.from("pod_design_concepts").delete().eq("id", id);
+    }
     if (uploaded) await supabase.storage.from(BUCKET).remove([path]).catch(() => {});
     return fail(res, 500, "Could not save the concept. Verify the database migration, private bucket, and server storage permissions.");
   }
