@@ -1261,4 +1261,27 @@ router.post(
     }
 );
 
+
+/*
+ * POD Agent preview endpoint.
+ * Generates a temporary design preview only: no Supabase writes, no storage
+ * upload, no Printful product creation, and no publishing.
+ */
+router.post("/pod/design-preview", requireAdmin, async (req, res) => {
+    try {
+        const prompt = req.body?.prompt;
+        if (typeof prompt !== "string" || !prompt.trim()) {
+            return res.status(400).json({ success: false, error: "A design prompt is required." });
+        }
+        const imageDataUrl = await generatePODDesignPreview(prompt);
+        return res.json({ success: true, imageDataUrl, persisted: false });
+    } catch (error) {
+        console.error("POD design preview error:", error);
+        return res.status(500).json({
+            success: false,
+            error: error.message || "Unable to generate POD design preview."
+        });
+    }
+});
+
 export default router;
