@@ -45,7 +45,10 @@ console.log("Stripe webhook mounted at /api/stripe/webhook");
 
 app.use(express.urlencoded({ extended: false }));
 app.use(express.text({ type: "text/plain" }));
-app.use(express.json());
+// Base64-encoded POD artwork can exceed Express’s default 100 KB JSON limit.
+// The POD route caps decoded images at 10 MB (about 13.4 MB as Base64), so allow
+// enough room for that image plus the surrounding JSON fields.
+app.use(express.json({ limit: "16mb" }));
 
 app.get("/", (req, res) => {
     res.json({ success: true, message: "PulsePlay API is running 🚀" });
