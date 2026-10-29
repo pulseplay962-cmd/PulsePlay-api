@@ -661,12 +661,28 @@ export async function queueSingleClipRender(clipId, authorization = "") {
 
   const { data: clip, error } = await supabase
     .from("ai_stream_clips")
-    .select("id,status,clip_url")
+    .select("id,status,clip_url,updated_at")
     .eq("id", clipId)
     .single();
   if (error || !clip) throw new Error("Clip candidate not found.");
-  if (clip.status === "rendering") throw new Error("This clip is already marked as rendering.");
   if (clip.clip_url) throw new Error("A master clip already exists. Refresh the clip library before rendering again.");
+
+  if (clip.status === "rendering") {
+    const updatedAt = new Date(clip.updated_at || 0).getTime();
+    const staleAfterMs = 20 * 60 * 1000;
+    if (!Number.isFinite(updatedAt) || Date.now() - updatedAt < staleAfterMs) {
+      throw new Error("This clip is already marked as rendering. Wait for the current render to finish before retrying.");
+    }
+
+    const { error: recoveryError } = await supabase
+      .from("ai_stream_clips")
+      .update({ status: "candidate", error: null })
+      .eq("id", clipId)
+      .eq("status", "rendering")
+      .is("clip_url", null);
+    if (recoveryError) throw recoveryError;
+    console.warn("AI single-clip render recovered stale rendering status:", { clipId });
+  }
 
   const endpoint = workerUrl.endsWith("/") ? workerUrl.slice(0, -1) : workerUrl;
   const response = await fetch(endpoint + "/render", {
@@ -690,7 +706,7 @@ export async function queueVerticalClipRender(clipId, authorization = "") {
   const response = await fetch(endpoint + "/render-vertical", {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Clip-Worker-Secret": workerSecret },
-    body: JSON.stringify({ clipId })
+    body: JSON.stringify({ clipId, authorization })
   });
   const text = await response.text();
   let result = {};
@@ -732,7 +748,7 @@ export async function queueCaptionedVerticalClipRender(clipId, authorization = "
     const workerResponse = await fetch(endpoint + "/render-captioned-vertical", {
       method:"POST",
       headers:{"Content-Type":"application/json","X-Clip-Worker-Secret":workerSecret},
-      body:JSON.stringify({clipId,captions})
+      body:JSON.stringify({clipId,captions,authorization})
     });
     const bodyText = await workerResponse.text();
     let result = {};

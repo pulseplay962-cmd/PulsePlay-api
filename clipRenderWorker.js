@@ -24,8 +24,15 @@ function authorized(req) {
   return req.headers["x-clip-worker-secret"] === WORKER_SECRET;
 }
 
-function workerClient() {
+function workerClient(authorization = "") {
+  if (!authorization.startsWith("Bearer ")) {
+    throw new Error("Administrator authorization is required for clip rendering.");
+  }
+
   return createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+    global: {
+      headers: { Authorization: authorization },
+    },
     auth: {
       autoRefreshToken: false,
       persistSession: false,
@@ -43,7 +50,7 @@ async function processQueue() {
 
     try {
       console.log("AI clip worker starting:", { clipId: job.clipId, queued: queue.length });
-      const db = workerClient();
+      const db = workerClient(job.authorization);
       if (job.mode === "captioned-vertical") await renderCaptionedVerticalClip(job.clipId, job.captions, db);
       else if (job.mode === "vertical") await renderVerticalClip(job.clipId, db);
       else await renderClip(job.clipId, db);
@@ -76,9 +83,11 @@ app.post("/render-captioned-vertical", (req, res) => {
   if (!authorized(req)) return res.status(401).json({ success: false, error: "Unauthorized render worker request." });
   const clipId = String(req.body?.clipId || "").trim();
   const captions = Array.isArray(req.body?.captions) ? req.body.captions : [];
+  const authorization = String(req.body?.authorization || "");
   if (!clipId || !captions.length) return res.status(400).json({ success: false, error: "clipId and captions are required." });
+  if (!authorization.startsWith("Bearer ")) return res.status(401).json({ success: false, error: "Administrator authorization is required." });
   if (queue.some((job) => job.clipId === clipId && job.mode === "captioned-vertical")) return res.status(202).json({ success: true, queued: true, duplicate: true, message: "Captioned clip is already queued.", queueLength: queue.length });
-  queue.push({ clipId, mode: "captioned-vertical", captions });
+  queue.push({ clipId, mode: "captioned-vertical", captions, authorization });
   void processQueue();
   return res.status(202).json({ success: true, queued: true, mode: "captioned-vertical", message: "Captioned vertical clip queued.", queueLength: queue.length });
 });
@@ -86,9 +95,11 @@ app.post("/render-captioned-vertical", (req, res) => {
 app.post("/render-vertical", (req, res) => {
   if (!authorized(req)) return res.status(401).json({ success: false, error: "Unauthorized render worker request." });
   const clipId = String(req.body?.clipId || "").trim();
+  const authorization = String(req.body?.authorization || "");
   if (!clipId) return res.status(400).json({ success: false, error: "clipId is required." });
+  if (!authorization.startsWith("Bearer ")) return res.status(401).json({ success: false, error: "Administrator authorization is required." });
   if (queue.some((job) => job.clipId === clipId && job.mode === "vertical")) return res.status(202).json({ success: true, queued: true, duplicate: true, message: "Vertical clip is already queued.", queueLength: queue.length });
-  queue.push({ clipId, mode: "vertical" });
+  queue.push({ clipId, mode: "vertical", authorization });
   void processQueue();
   return res.status(202).json({ success: true, queued: true, mode: "vertical", message: "Vertical clip queued for background rendering.", queueLength: queue.length });
 });
@@ -100,11 +111,17 @@ app.post("/render", (req, res) => {
 
   const clipId = String(req.body?.clipId || "").trim();
 
+  const authorization = String(req.body?.authorization || "");
+
   if (!clipId) {
     return res.status(400).json({
       success: false,
       error: "clipId is required.",
     });
+  }
+
+  if (!authorization.startsWith("Bearer ")) {
+    return res.status(401).json({ success: false, error: "Administrator authorization is required." });
   }
 
   if (queue.some((job) => job.clipId === clipId)) {
@@ -117,7 +134,7 @@ app.post("/render", (req, res) => {
     });
   }
 
-  queue.push({ clipId });
+  queue.push({ clipId, authorization });
   void processQueue();
 
   return res.status(202).json({
