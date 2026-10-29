@@ -7,6 +7,7 @@ import {
   listClips,
   analyzeVodForClipCandidates,
   autoRenderTopClips,
+  queueSingleClipRender,
   queueVerticalClipRender,
   queueCaptionedVerticalClipRender,
 } from "../services/ai/streamClipService.js";
@@ -76,6 +77,15 @@ router.post("/vods/:id/render-top", requireAdmin, async (req, res) => {
     res.json({ success: true, ...result });
   } catch (error) {
     return sendError(res, "AI clip render queue error:", error, "Unable to queue clip renders.");
+  }
+});
+
+router.post("/clips/:id/render", requireAdmin, async (req, res) => {
+  try {
+    const result = await queueSingleClipRender(req.params.id, req.headers.authorization || "");
+    res.status(202).json({ success: true, ...result });
+  } catch (error) {
+    return sendError(res, "AI single clip queue error:", error, "Unable to queue this clip render.");
   }
 });
 
