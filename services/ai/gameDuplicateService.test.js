@@ -30,6 +30,15 @@ test("treats an exact title with a conflicting release date as a possible match"
     assert.equal(result.status, "possible_match");
 });
 
+test("does not flag titles that only share broad franchise words", () => {
+    const result = findGameDuplicate(
+        { title: "Star Wars Outlaws", release_date: "2026-10-01" },
+        [{ id: "5", title: "Star Wars Battlefront", release_date: "2026-10-01" }]
+    );
+
+    assert.equal(result.status, "new");
+});
+
 test("leaves unrelated titles as new", () => {
     const result = findGameDuplicate(
         { title: "Hollow Knight Silksong", release_date: "2026-10-01" },
