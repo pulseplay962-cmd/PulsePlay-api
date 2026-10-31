@@ -1,5 +1,5 @@
 const EDITION_TERMS = new Set(["remastered","remaster","remake","definitive","director","cut","deluxe","ultimate","complete","gold","goty","anniversary","enhanced","collector","collectors","edition"]);
-function normalizeTitle(value) { return String(value || "").toLowerCase().replace(/[’']/,"").replace(/[^a-z0-9]+/g," ").replace(/\s+/," ").trim(); }
+function normalizeTitle(value) { return String(value || "").toLowerCase().replaceAll("'", "").replaceAll("’", "").replace(/[^a-z0-9]+/g, " ").replace(/\s+/g, " ").trim(); }
 function titleParts(value) { const tokens=normalizeTitle(value).split(" ").filter(Boolean); return {base:tokens.filter(t=>!EDITION_TERMS.has(t)).join(" "),edition:tokens.filter(t=>EDITION_TERMS.has(t)).sort().join(" ")}; }
 function platformTokens(value) {
  const v=String(value||"").toLowerCase(), found=new Set();
