@@ -22,7 +22,7 @@ function isValidDate(value) {
  * This function:
  * 1. Validates the package.
  * 2. Prevents duplicate games.
- * 3. Creates or updates the games record.
+ * 3. Inserts a new record only after the duplicate check passes.
  * 4. Queues the Facebook post.
  *
  * Facebook is NOT posted immediately.
