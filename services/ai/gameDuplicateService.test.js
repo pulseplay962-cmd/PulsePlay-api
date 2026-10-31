@@ -1,49 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { findGameDuplicate } from "./gameDuplicateService.js";
-
-test("flags punctuation and case variants as already listed", () => {
-    const result = findGameDuplicate(
-        { title: "Spider-Man 2", release_date: "2026-10-01", platform: "PS5" },
-        [{ id: "1", title: "Spider Man 2", release_date: "2026-10-01", platform: "PS5" }]
-    );
-
-    assert.equal(result.status, "already_listed");
-    assert.equal(result.match.id, "1");
-});
-
-test("flags a similar title as a possible match without calling it exact", () => {
-    const result = findGameDuplicate(
-        { title: "The Last of Us Part II Remastered", release_date: "2026-09-01" },
-        [{ id: "2", title: "The Last of Us Part II", release_date: "2026-09-01" }]
-    );
-
-    assert.equal(result.status, "possible_match");
-});
-
-test("treats an exact title with a conflicting release date as a possible match", () => {
-    const result = findGameDuplicate(
-        { title: "Example Game", release_date: "2026-10-01", platform: "PS5" },
-        [{ id: "3", title: "Example Game", release_date: "2010-10-01", platform: "PS5" }]
-    );
-
-    assert.equal(result.status, "possible_match");
-});
-
-test("does not flag titles that only share broad franchise words", () => {
-    const result = findGameDuplicate(
-        { title: "Star Wars Outlaws", release_date: "2026-10-01" },
-        [{ id: "5", title: "Star Wars Battlefront", release_date: "2026-10-01" }]
-    );
-
-    assert.equal(result.status, "new");
-});
-
-test("leaves unrelated titles as new", () => {
-    const result = findGameDuplicate(
-        { title: "Hollow Knight Silksong", release_date: "2026-10-01" },
-        [{ id: "4", title: "Grand Theft Auto VI", release_date: "2026-10-01" }]
-    );
-
-    assert.equal(result.status, "new");
-});
+test("punctuation and case variants on same release are duplicates",()=>{const r=findGameDuplicate({title:"Spider-Man 2",release_date:"2026-10-01",platform:"PS5"},[{id:"1",title:"Spider Man 2",release_date:"2026-10-01",platform:"PlayStation 5"}]);assert.equal(r.status,"already_listed");assert.equal(r.match.id,"1");});
+test("same game release date and platform is already listed",()=>assert.equal(findGameDuplicate({title:"Example Game",release_date:"2026-10-01",platform:"PC"},[{title:"Example Game",release_date:"2026-10-01",platform:"Steam / PC"}]).status,"already_listed"));
+test("remaster is distinct from original edition",()=>assert.equal(findGameDuplicate({title:"The Last of Us Part II Remastered",release_date:"2026-09-01",platform:"PS5"},[{title:"The Last of Us Part II",release_date:"2026-09-01",platform:"PS5"}]).status,"new"));
+test("conflicting dates on same platform require review",()=>assert.equal(findGameDuplicate({title:"Example Game",release_date:"2026-10-01",platform:"PS5"},[{title:"Example Game",release_date:"2010-10-01",platform:"PS5"}]).status,"possible_match"));
+test("same title on a distinct platform is a separate release",()=>assert.equal(findGameDuplicate({title:"Example Game",release_date:"2026-10-01",platform:"PC"},[{title:"Example Game",release_date:"2026-10-01",platform:"PS5"}]).status,"new"));
+test("fuzzy title variants remain possible matches",()=>assert.equal(findGameDuplicate({title:"The Last of Us Part II Online",release_date:"2026-09-01",platform:"PS5"},[{title:"The Last of Us Part II",release_date:"2026-09-01",platform:"PS5"}]).status,"possible_match"));
+test("unrelated franchise entries are not duplicates",()=>assert.equal(findGameDuplicate({title:"Star Wars Outlaws",release_date:"2026-10-01"},[{title:"Star Wars Battlefront",release_date:"2026-10-01"}]).status,"new"));
+test("unrelated titles remain new",()=>assert.equal(findGameDuplicate({title:"Hollow Knight Silksong",release_date:"2026-10-01"},[{title:"Grand Theft Auto VI",release_date:"2026-10-01"}]).status,"new"));

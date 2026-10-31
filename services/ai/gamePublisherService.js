@@ -1,4 +1,5 @@
 import { supabase } from "../../lib/supabase.js";
+import { findGameDuplicate } from "./gameDuplicateService.js";
 
 function slugify(value = "") {
     return value
@@ -11,15 +12,6 @@ function slugify(value = "") {
         .replace(/^-+|-+$/g, "");
 }
 
-function normalizeTitle(title = "") {
-    return title
-        .toLowerCase()
-        .replace(/[’']/g, "")
-        .replace(/[:\-–—]/g, " ")
-        .replace(/\s+/g, " ")
-        .trim();
-}
-
 function isValidDate(value) {
     return /^\d{4}-\d{2}-\d{2}$/.test(value);
 }
@@ -30,7 +22,7 @@ function isValidDate(value) {
  * This function:
  * 1. Validates the package.
  * 2. Prevents duplicate games.
- * 3. Creates or updates the games record.
+ * 3. Inserts a new record only after the duplicate check passes.
  * 4. Queues the Facebook post.
  *
  * Facebook is NOT posted immediately.
@@ -86,97 +78,30 @@ export async function publishGamePackage({
     }
 
     /*
-     * Enforce monthly game limit.
+     * Final duplicate safeguard: no writes occur until this check passes.
      */
-    if (
-        selectedYear !== undefined &&
-        selectedYear !== null &&
-        selectedMonth !== undefined &&
-        selectedMonth !== null
-    ) {
-        const monthStart =
-            `${String(selectedYear).padStart(4, "0")}-` +
-            `${String(selectedMonth).padStart(2, "0")}-01`;
-
-        const nextMonthDate = new Date(
-            Date.UTC(Number(selectedYear), Number(selectedMonth), 1)
-        );
-
-        const nextMonthStart =
-            `${nextMonthDate.getUTCFullYear()}-` +
-            `${String(nextMonthDate.getUTCMonth() + 1).padStart(2, "0")}-01`;
-
-        const { count, error: countError } = await supabase
-            .from("games")
-            .select("id", {
-                count: "exact",
-                head: true
-            })
-            .gte("release_date", monthStart)
-            .lt("release_date", nextMonthStart)
-            .neq("status", "archived");
-
-        if (countError) {
-            throw new Error(
-                `Unable to check monthly game limit: ${countError.message}`
-            );
-        }
-
-        /*
-         * If this game already exists, updating it should not consume
-         * another slot.
-         */
-        const normalizedIncomingTitle =
-            normalizeTitle(packageData.title);
-
-        const { data: existingByTitle, error: titleCheckError } =
-            await supabase
-                .from("games")
-                .select("id,title,release_date,status,slug")
-                .ilike("title", packageData.title)
-                .limit(10);
-
-        if (titleCheckError) {
-            throw new Error(
-                `Unable to check existing game: ${titleCheckError.message}`
-            );
-        }
-
-        const isExistingGame = (existingByTitle || []).some(
-            (game) =>
-                normalizeTitle(game.title) === normalizedIncomingTitle
-        );
-
-        if (!isExistingGame && Number(count || 0) >= Number(maxGames)) {
-            throw new Error(
-                `The selected month already has ${count} approved games. Maximum allowed is ${maxGames}.`
-            );
-        }
+    const { data: existingGames, error: existingError } = await supabase
+        .from("games").select("id,title,release_date,platform,slug").limit(1000);
+    if (existingError) throw new Error(`Unable to check for duplicate game: ${existingError.message}`);
+    const duplicateCheck = findGameDuplicate(packageData, existingGames || []);
+    if (duplicateCheck.status === "already_listed") {
+        throw new Error(`This game release is already in the PulsePlay library: "${duplicateCheck.match.title}". No record was changed.`);
+    }
+    if (duplicateCheck.status === "possible_match") {
+        throw new Error(`A similar game is already in the library: "${duplicateCheck.match.title}". Review its title, release date, and platform before publishing. No record was changed.`);
     }
 
     /*
-     * Find existing game by normalized title.
+     * Enforce the selected calendar month's game limit.
      */
-    const { data: existingGames, error: existingError } =
-        await supabase
-            .from("games")
-            .select("*")
-            .ilike("title", packageData.title)
-            .limit(20);
-
-    if (existingError) {
-        throw new Error(
-            `Unable to check for duplicate game: ${existingError.message}`
-        );
+    if (selectedYear !== undefined && selectedYear !== null && selectedMonth !== undefined && selectedMonth !== null) {
+        const monthStart = `${String(selectedYear).padStart(4, "0")}-${String(selectedMonth).padStart(2, "0")}-01`;
+        const nextMonthDate = new Date(Date.UTC(Number(selectedYear), Number(selectedMonth), 1));
+        const nextMonthStart = `${nextMonthDate.getUTCFullYear()}-${String(nextMonthDate.getUTCMonth() + 1).padStart(2, "0")}-01`;
+        const { count, error: countError } = await supabase.from("games").select("id",{count:"exact",head:true}).gte("release_date",monthStart).lt("release_date",nextMonthStart).neq("status","archived");
+        if(countError) throw new Error(`Unable to check monthly game limit: ${countError.message}`);
+        if(Number(count||0)>=Number(maxGames)) throw new Error(`The selected month already has ${count} approved games. Maximum allowed is ${maxGames}.`);
     }
-
-    const normalizedIncomingTitle =
-        normalizeTitle(packageData.title);
-
-    const existingGame = (existingGames || []).find(
-        (game) =>
-            normalizeTitle(game.title) === normalizedIncomingTitle
-    );
 
     /*
      * Build the base slug.
@@ -205,11 +130,7 @@ export async function publishGamePackage({
         );
     }
 
-    const slugBelongsToAnotherGame = (slugMatches || []).some(
-        (game) =>
-            !existingGame ||
-            game.id !== existingGame.id
-    );
+    const slugBelongsToAnotherGame = (slugMatches || []).length > 0;
 
     if (slugBelongsToAnotherGame) {
         slug = `${baseSlug}-${packageData.release_date}`;
@@ -251,47 +172,14 @@ export async function publishGamePackage({
         hashtags: packageData.hashtags || null
     };
 
-    let game;
-    let action;
-
     /*
-     * Update existing game.
+     * Only insert a distinct release. Never overwrite an existing game
+     * record from the AI publisher.
      */
-    if (existingGame) {
-        const { data, error } = await supabase
-            .from("games")
-            .update(gamePayload)
-            .eq("id", existingGame.id)
-            .select()
-            .single();
-
-        if (error) {
-            throw new Error(
-                `Unable to update existing game: ${error.message}`
-            );
-        }
-
-        game = data;
-        action = "updated";
-    } else {
-        /*
-         * Create new game.
-         */
-        const { data, error } = await supabase
-            .from("games")
-            .insert(gamePayload)
-            .select()
-            .single();
-
-        if (error) {
-            throw new Error(
-                `Unable to publish game: ${error.message}`
-            );
-        }
-
-        game = data;
-        action = "created";
-    }
+    const { data: game, error: insertError } = await supabase
+        .from("games").insert(gamePayload).select().single();
+    if (insertError) throw new Error(`Unable to publish game: ${insertError.message}`);
+    const action = "created";
 
     /*
      * Prevent duplicate scheduled Facebook entries for the same game.
