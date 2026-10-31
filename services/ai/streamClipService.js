@@ -185,10 +185,13 @@ async function downloadClip(sourceUrl, startSeconds, endSeconds, outputFile) {
       noWarnings: true,
       retries: 2,
       fragmentRetries: 2,
+      concurrentFragments: 1,
       socketTimeout: 30,
       ffmpegLocation: ffmpegPath,
+      downloaderArgs: { ffmpeg: ["-threads", "1"] },
       downloadSections: `*${start}-${end}`,
-      forceKeyframesAtCuts: true
+      // Avoid forced keyframes, which can trigger a costly video re-encode.
+      forceKeyframesAtCuts: false
     });
 
     const stat = await fs.stat(downloadFile).catch(() => null);
@@ -230,10 +233,14 @@ export async function renderClip(clipId, db = supabase) {
   try {
     await db.from("ai_stream_clips").update({status:"rendering",error:null}).eq("id",clipId);
     await downloadClip(clip.source_url,clip.start_seconds,clip.end_seconds,outputFile);
+    const outputStat = await fs.stat(outputFile);
+    console.log("AI clip storage upload starting:", { clipId, bytes: outputStat.size });
+    const uploadStartedAt = Date.now();
     const buffer = await fs.readFile(outputFile);
     const storagePath = `ai-stream-clips/${new Date().getUTCFullYear()}/${clipId}.mp4`;
     const upload = await db.storage.from(bucket).upload(storagePath,buffer,{contentType:"video/mp4",upsert:true});
     if (upload.error) throw upload.error;
+    console.log("AI clip storage upload completed:", { clipId, bytes: buffer.length, elapsedMs: Date.now() - uploadStartedAt });
     const clipUrl = db.storage.from(bucket).getPublicUrl(storagePath)?.data?.publicUrl || null;
     const { data: updated, error:updateError } = await db.from("ai_stream_clips").update({clip_url:clipUrl,status:"ready",error:null}).eq("id",clipId).select().single();
     if (updateError) throw updateError;
