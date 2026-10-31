@@ -1,4 +1,5 @@
 import express from "express";
+import { findGameDuplicate } from "../services/ai/gameDuplicateService.js";
 import { createClient } from "@supabase/supabase-js";
 import {
     generateAndSaveWeeklyContent,
@@ -228,6 +229,25 @@ router.post(
                     limit
                 });
 
+            // Read the existing library only; scanning never writes to games.
+            const { data: existingGames, error: gamesError } =
+                await supabase
+                    .from("games")
+                    .select("id, title, release_date, platform, status");
+
+            if (gamesError) {
+                throw new Error(
+                    `Unable to check the existing game library: ${gamesError.message}`
+                );
+            }
+
+            const releasesWithDuplicateStatus = result.releases.map((release) => ({
+                ...release,
+                duplicate_check: findGameDuplicate(
+                    release,
+                    existingGames || []
+                )
+            }));
 
             return res.json({
 
@@ -243,7 +263,7 @@ router.post(
                     result.limit,
 
                 releases:
-                    result.releases
+                    releasesWithDuplicateStatus
 
             });
 
@@ -323,6 +343,33 @@ router.post(
             console.log(
                 "================================="
             );
+
+            // Re-check on the server before spending AI credits.
+            const { data: existingGames, error: gamesError } =
+                await supabase
+                    .from("games")
+                    .select("id, title, release_date, platform, status");
+
+            if (gamesError) {
+                throw new Error(
+                    `Unable to verify the existing game library: ${gamesError.message}`
+                );
+            }
+
+            const duplicateCheck = findGameDuplicate(
+                release,
+                existingGames || []
+            );
+
+            if (duplicateCheck.status !== "new") {
+                return res.status(409).json({
+                    success: false,
+                    duplicate_check: duplicateCheck,
+                    error: duplicateCheck.status === "already_listed"
+                        ? `"${release.title}" is already in the PulsePlay Games library. AI package generation was blocked.`
+                        : `"${release.title}" may match an existing game ("${duplicateCheck.match.title}"). Review the library before generating a package.`
+                });
+            }
 
             const packageData =
                 await generateGamePackage(release);
