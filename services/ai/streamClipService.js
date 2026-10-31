@@ -710,6 +710,11 @@ export async function queueSingleClipRender(clipId, authorization = "") {
       statusText: response.statusText,
       contentType,
       workerError,
+      // Capture only a short, sanitized response excerpt for non-JSON proxy/rate-limit errors.
+      // Never log request headers, bearer tokens, worker secrets, or full response bodies.
+      responseExcerpt: text
+        ? text.replace(/[\\r\\n\\t]+/g, " ").replace(/(authorization|token|secret|password)\\s*[:=]\\s*[^\\s,;]+/gi, "$1=[redacted]").slice(0, 240)
+        : null,
       responseWasJson: Boolean(text) && typeof result === "object" && Object.keys(result).length > 0
     });
     throw new Error(workerError || `Render worker returned HTTP ${response.status} (${contentType}).`);
