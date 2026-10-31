@@ -44,7 +44,8 @@ function tokenSimilarity(left, right) {
         if (rightTokens.has(token)) overlap += 1;
     }
 
-    return overlap / Math.min(leftTokens.size, rightTokens.size);
+    const union = new Set([...leftTokens, ...rightTokens]).size;
+    return union ? overlap / union : 0;
 }
 
 export function findGameDuplicate(candidate, games = []) {
