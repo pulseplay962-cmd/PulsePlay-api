@@ -691,9 +691,23 @@ export async function queueSingleClipRender(clipId, authorization = "") {
     body: JSON.stringify({ clipId, authorization }),
   });
   const text = await response.text();
+  const contentType = response.headers.get("content-type") || "unknown";
   let result = {};
   try { result = JSON.parse(text || "{}"); } catch {}
-  if (!response.ok || !result.success) throw new Error(result.error || "Unable to queue clip render.");
+
+  if (!response.ok || !result.success) {
+    const workerError = typeof result.error === "string" ? result.error.slice(0, 300) : null;
+    console.error("AI single-clip worker rejected queue request:", {
+      clipId,
+      status: response.status,
+      statusText: response.statusText,
+      contentType,
+      workerError,
+      responseWasJson: Boolean(text) && typeof result === "object" && Object.keys(result).length > 0
+    });
+    throw new Error(workerError || `Render worker returned HTTP ${response.status} (${contentType}).`);
+  }
+
   return result;
 }
 
