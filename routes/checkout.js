@@ -159,16 +159,12 @@ router.get("/order/:sessionId", async (req, res) => {
         .select(`
           id,
           stripe_session_id,
-          stripe_payment_intent_id,
           merchandise_id,
           variant_id,
           quantity,
           amount_total,
           currency,
           status,
-          printful_order_id,
-          created_at,
-          updated_at
         `)
         .eq("stripe_session_id", sessionId)
         .maybeSingle();
@@ -231,9 +227,6 @@ router.get("/order/:sessionId", async (req, res) => {
         amount_total: order.amount_total,
         currency: order.currency,
         status: order.status,
-        printful_order_id: order.printful_order_id,
-        created_at: order.created_at,
-        updated_at: order.updated_at,
       },
 
       merchandise: {
@@ -251,10 +244,6 @@ router.get("/order/:sessionId", async (req, res) => {
 
       payment: {
         status: session.payment_status,
-        payment_intent:
-          typeof session.payment_intent === "string"
-            ? session.payment_intent
-            : null,
       },
     });
   } catch (error) {
@@ -265,7 +254,7 @@ router.get("/order/:sessionId", async (req, res) => {
 
     return res.status(500).json({
       success: false,
-      error: error?.message || "Unable to retrieve order information.",
+      error: "Unable to retrieve order information.",
     });
   }
 });
