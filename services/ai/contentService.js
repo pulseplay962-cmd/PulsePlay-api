@@ -991,18 +991,16 @@ function validateGeneratedPost(
     // =====================================
 
     /*
-     * Monday    = index 0
-     * Thursday  = index 3
-     * Friday    = index 4
-     * Sunday    = index 6
+     * Monday    = index 0 (gaming news)
+     * Wednesday= index 2 (game spotlight)
+     * Friday    = index 4 (weekend picks and releases)
      */
 
     const requiresResearch =
         (
             index === 0 ||
-            index === 3 ||
-            index === 4 ||
-            index === 6
+            index === 2 ||
+            index === 4
         );
 
 
@@ -2556,10 +2554,9 @@ export async function generateWeeklyContent() {
         // =====================================
 
         /*
-         * Monday
-         * Thursday
-         * Friday
-         * Sunday
+         * Monday: Gaming News & Industry Updates
+         * Wednesday: Game Spotlight & Gaming Features
+         * Friday: Weekend Gaming Picks & Releases
          *
          * These days must be research-backed.
          */
@@ -2575,7 +2572,7 @@ export async function generateWeeklyContent() {
 
 
         // =====================================
-        // Validate All Seven Posts
+        // Validate All Five Weekday Articles
         // =====================================
 
         const posts =
