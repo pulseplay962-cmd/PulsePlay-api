@@ -19,38 +19,38 @@ import { researchGamingNews } from "./researchService.js";
 const weeklySchedule = {
 
     Monday: {
-        website: "Game Spotlight",
-        facebook: "Promote article + discussion"
+        website: "Gaming News & Industry Updates",
+        facebook: "Promote approved article + gaming discussion"
     },
 
     Tuesday: {
-        website: "Gaming Gear Guide",
-        facebook: "Gear teaser"
+        website: "PC Hardware & Technology",
+        facebook: "PC hardware discussion"
     },
 
     Wednesday: {
-        website: "Community Poll",
-        facebook: "Community discussion"
+        website: "Game Spotlight & Gaming Features",
+        facebook: "Game spotlight discussion"
     },
 
     Thursday: {
-        website: "Gaming News & Updates",
-        facebook: "Gaming news discussion"
+        website: "PC Builds, Components & Gear",
+        facebook: "PC build and gear discussion"
     },
 
     Friday: {
-        website: "Weekend Gaming Picks",
+        website: "Weekend Gaming Picks & Releases",
         facebook: "Weekend gaming recommendations"
     },
 
     Saturday: {
-        website: "Gaming Tips & Tricks",
-        facebook: "Gaming tips discussion"
+        website: null,
+        facebook: "Community engagement only"
     },
 
     Sunday: {
-        website: "Weekly Gaming Roundup",
-        facebook: "Weekly gaming discussion"
+        website: null,
+        facebook: "Short weekly roundup only"
     }
 
 };
@@ -1415,129 +1415,34 @@ This content was generated locally and did not use OpenAI credits.`,
 
 function generateDevelopmentWeeklyContent() {
 
-    const dates =
-        getUpcomingDates();
-
+    const dates = getUpcomingDates();
 
     const schedule = [
-
-        [
-            "Game Spotlight",
-            "Games",
-            "article"
-        ],
-
-        [
-            "Gaming Gear Guide",
-            "Gear",
-            "gaming_gear"
-        ],
-
-        [
-            "Community Poll",
-            "Community",
-            "poll"
-        ],
-
-        [
-            "Gaming News & Updates",
-            "Games",
-            "gaming_news"
-        ],
-
-        [
-            "Weekend Gaming Picks",
-            "Recommendations",
-            "gaming_recommendation"
-        ],
-
-        [
-            "Gaming Tips & Tricks",
-            "Games",
-            "gaming_tips"
-        ],
-
-        [
-            "Weekly Gaming Roundup",
-            "Community",
-            "weekly_roundup"
-        ]
-
+        ["Gaming News & Industry Updates", "Games", "gaming_news"],
+        ["PC Hardware & Technology", "Gear", "gaming_gear"],
+        ["Game Spotlight & Gaming Features", "Games", "article"],
+        ["PC Builds, Components & Gear", "Gear", "gaming_gear"],
+        ["Weekend Gaming Picks & Releases", "Recommendations", "gaming_recommendation"]
     ];
 
-
-    const titles = [
-
-        "Development Game Spotlight",
-        "Development Gaming Gear Guide",
-        "Development Community Poll",
-        "Development Gaming News & Updates",
-        "Development Weekend Gaming Picks",
-        "Development Gaming Tips & Tricks",
-        "Development Weekly Gaming Roundup"
-
-    ];
-
-
-    return schedule.map(
-
-        (
-            [
-                contentType,
-                category,
-                type
-            ],
-            index
-        ) => ({
-
-            title:
-                `[DEV] ${titles[index]}`,
-
-            content_type:
-                type,
-
-            category,
-
-            body:
-
-`# ${titles[index]}
+    return schedule.map(([theme, category, type], index) => ({
+        title: `[DEV] ${theme}`,
+        content_type: type,
+        category,
+        body: `# ${theme}
 
 ## PulseAI Development Mode
 
-This is locally generated development content for testing the PulsePlay AI publishing pipeline.
-
-Content type: ${contentType}
+This is locally generated development content for testing the five-article PulsePlay weekly schedule.
 
 This test content does not use OpenAI and does not represent verified gaming news.`,
-
-            social_caption:
-                `[DEV] PulsePlay AI is testing the ${contentType} pipeline. What do you think? #PulsePlay #Gaming`,
-
-            image_prompt:
-                `PulsePlay dark neon gaming artwork for ${contentType}, cinematic lighting, futuristic gaming environment, cyberpunk aesthetic, no text, no logos.`,
-
-            hashtags: [
-
-
-                "#PulsePlay",
-                "#Gaming",
-                "#VideoGames"
-
-            ],
-
-
-            source_url:
-                null,
-
-            scheduled_date:
-                Object.values(dates)[index],
-
-            status:
-                "pending"
-
-        })
-
-    );
+        social_caption: `[DEV] PulsePlay is testing the ${theme} content workflow. What would you like to see covered? #PulsePlay #Gaming`,
+        image_prompt: `PulsePlay dark neon gaming artwork for ${theme}, cinematic lighting, futuristic gaming environment, cyberpunk aesthetic, no text, no logos.`,
+        hashtags: ["#PulsePlay", "#Gaming", "#VideoGames"],
+        source_url: null,
+        scheduled_date: Object.values(dates)[index],
+        status: "pending"
+    }));
 
 }
 
@@ -2092,11 +1997,11 @@ export async function generateWeeklyContent() {
 
             "",
 
-            "Your job is to create exactly 7 high-quality gaming content items for PulsePlay.online.",
+            "Your job is to create exactly 5 full-length gaming articles for PulsePlay.online, one for each weekday Monday through Friday.",
 
             "",
 
-            "You MUST create exactly ONE item for each scheduled day.",
+            "Create exactly ONE article for each weekday. Saturday and Sunday are not full articles and must not be included in this generation.",
 
             "",
 
@@ -2325,228 +2230,62 @@ export async function generateWeeklyContent() {
 
             // =====================================
             // MONDAY
-            // =====================================
 
-            "MONDAY:",
-
+            "MONDAY — GAMING NEWS & INDUSTRY UPDATES:",
             "",
-
-            "Content Type: article",
-
-            "Category: Games",
-
-            "Theme: Game Spotlight",
-
-            "",
-
-            "Choose a specific game ONLY if that game appears in CURRENT RESEARCH DATA.",
-
-            "",
-
-            "The article must be supported by the selected research source.",
-
-            "",
-
-            "research_source_index is REQUIRED when a specific current game is discussed.",
-
-            "",
-
-
-            // =====================================
-            // TUESDAY
-            // =====================================
-
-            "TUESDAY:",
-
-            "",
-
-            "Content Type: gaming_gear",
-
-            "Category: Gear",
-
-            "Theme: Gaming Gear Guide",
-
-            "",
-
-            "General gaming hardware advice is allowed.",
-
-            "",
-
-            "Do not claim a specific current product, price, specification, release, or announcement unless supported by research.",
-
-            "",
-
-            "research_source_index may be null for completely general advice.",
-
-            "",
-
-
-            // =====================================
-            // WEDNESDAY
-            // =====================================
-
-            "WEDNESDAY:",
-
-            "",
-
-            "Content Type: poll",
-
-            "Category: Community",
-
-            "Theme: Community Poll",
-
-            "",
-
-            "Create an engaging question for gamers.",
-
-            "",
-
-            "The poll may be completely opinion-based.",
-
-            "",
-
-            "Avoid unsupported current factual claims.",
-
-            "",
-
-            "research_source_index may be null.",
-
-            "",
-
-
-            // =====================================
-            // THURSDAY
-            // =====================================
-
-            "THURSDAY:",
-
-            "",
-
             "Content Type: gaming_news",
-
             "Category: Games",
-
-            "Theme: Gaming News & Updates",
-
+            "Write a full-length article about a meaningful current gaming industry development.",
+            "This article MUST be based directly on CURRENT RESEARCH DATA.",
+            "research_source_index is REQUIRED and the selected source must support the article.",
             "",
 
-            "This MUST be based directly on CURRENT RESEARCH DATA.",
+            // TUESDAY
 
+            "TUESDAY — PC HARDWARE & TECHNOLOGY:",
+            "",
+            "Content Type: gaming_gear",
+            "Category: Gear",
+            "Write a full-length, useful article about PC hardware or gaming technology.",
+            "General technical education is allowed.",
+            "Do not invent current product specifications, prices, benchmarks, releases, or announcements.",
+            "research_source_index may be null for general educational coverage.",
             "",
 
-            "Choose one meaningful current gaming development.",
+            // WEDNESDAY
 
+            "WEDNESDAY — GAME SPOTLIGHT & GAMING FEATURES:",
             "",
-
+            "Content Type: article",
+            "Category: Games",
+            "Write a full-length game spotlight or gaming feature.",
+            "A specific game or current feature must be supported by CURRENT RESEARCH DATA.",
             "research_source_index is REQUIRED.",
-
             "",
 
-            "The selected source must directly support the article.",
+            // THURSDAY
 
+            "THURSDAY — PC BUILDS, COMPONENTS & GEAR:",
+            "",
+            "Content Type: gaming_gear",
+            "Category: Gear",
+            "Write a full-length practical article about PC builds, components, compatibility, or gaming gear.",
+            "General build guidance is allowed.",
+            "Never invent product specifications, prices, availability, or benchmark results.",
+            "research_source_index may be null for general educational coverage.",
             "",
 
-
-            // =====================================
             // FRIDAY
-            // =====================================
 
-            "FRIDAY:",
-
+            "FRIDAY — WEEKEND GAMING PICKS & RELEASES:",
             "",
-
             "Content Type: gaming_recommendation",
-
             "Category: Recommendations",
-
-            "Theme: Weekend Gaming Picks",
-
-            "",
-
-            "Recommend a game only if you can safely support any current factual claims.",
-
-            "",
-
-            "If recommending a game from current research, use its correct research_source_index.",
-
-            "",
-
-            "Do not invent current availability, release status, updates, DLC, prices, or platform information.",
-
-            "",
-
-            "research_source_index is REQUIRED when the recommendation relies on current research.",
-
-            "",
-
-
-            // =====================================
-            // SATURDAY
-            // =====================================
-
-            "SATURDAY:",
-
-            "",
-
-            "Content Type: gaming_tips",
-
-            "Category: Games",
-
-            "Theme: Gaming Tips & Tricks",
-
-            "",
-
-            "Provide useful general gaming advice.",
-
-            "",
-
-            "Do not invent game-specific mechanics.",
-
-            "",
-
-            "If game-specific advice is provided, the game must be supported by research.",
-
-            "",
-
-            "research_source_index may be null for generic advice.",
-
-            "",
-
-
-            // =====================================
-            // SUNDAY
-            // =====================================
-
-            "SUNDAY:",
-
-            "",
-
-            "Content Type: weekly_roundup",
-
-            "Category: Community",
-
-            "Theme: Weekly Gaming Roundup",
-
-            "",
-
-            "Summarize ONLY developments appearing in CURRENT RESEARCH DATA.",
-
-            "",
-
-            "Do not add unrelated games or stories from general knowledge.",
-
-            "",
-
+            "Write a full-length article highlighting worthwhile weekend gaming picks and confirmed releases.",
+            "All current release dates, availability, updates, and platform claims MUST be supported by CURRENT RESEARCH DATA.",
             "research_source_index is REQUIRED.",
-
             "",
 
-            "The selected source must support the main topic of the roundup.",
-
-            "",
-
-
-            // =====================================
             // CONTENT QUALITY
             // =====================================
 
@@ -2692,7 +2431,7 @@ export async function generateWeeklyContent() {
 
             "",
 
-            "The posts array MUST contain exactly 7 objects.",
+            "The posts array MUST contain exactly 5 objects.",
 
             "",
 
@@ -2709,10 +2448,6 @@ export async function generateWeeklyContent() {
             "4. Thursday",
 
             "5. Friday",
-
-            "6. Saturday",
-
-            "7. Sunday",
 
             "",
 
@@ -2786,7 +2521,7 @@ export async function generateWeeklyContent() {
 
 
         // =====================================
-        // Validate Seven Posts
+        // Validate Five Weekday Articles
         // =====================================
 
         const generatedPosts =
@@ -2796,19 +2531,19 @@ export async function generateWeeklyContent() {
 
                 ? result.posts.slice(
                     0,
-                    7
+                    5
                 )
 
                 : [];
 
 
         if (
-            generatedPosts.length !== 7
+            generatedPosts.length !== 5
         ) {
 
             throw new Error(
 
-                `AI must generate exactly 7 posts. ` +
+                `AI must generate exactly 5 articles. ` +
                 `Received ${generatedPosts.length}.`
 
             );
@@ -2833,9 +2568,8 @@ export async function generateWeeklyContent() {
             new Set([
 
                 0,
-                3,
-                4,
-                6
+                2,
+                4
 
             ]);
 
@@ -2916,13 +2650,13 @@ export async function generateWeeklyContent() {
         // =====================================
 
         if (
-            posts.length !== 7
+            posts.length !== 5
         ) {
 
             throw new Error(
 
                 `Weekly generation failed validation. ` +
-                `Expected 7 posts, received ${posts.length}.`
+                `Expected 5 articles, received ${posts.length}.`
 
             );
 
@@ -2935,13 +2669,11 @@ export async function generateWeeklyContent() {
 
         const expectedTypes = [
 
+            "gaming_news",
+            "gaming_gear",
             "article",
             "gaming_gear",
-            "poll",
-            "gaming_news",
-            "gaming_recommendation",
-            "gaming_tips",
-            "weekly_roundup"
+            "gaming_recommendation"
 
         ];
 
@@ -3195,11 +2927,11 @@ export async function generateAndSaveWeeklyContent() {
 
         if (
             !Array.isArray(posts) ||
-            posts.length !== 7
+            posts.length !== 5
         ) {
 
             throw new Error(
-                `Weekly content generation failed. Expected 7 posts, received ${posts?.length || 0}.`
+                `Weekly content generation failed. Expected 5 articles, received ${posts?.length || 0}.`
             );
 
         }
